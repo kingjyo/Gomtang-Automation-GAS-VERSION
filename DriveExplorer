@@ -1,0 +1,450 @@
+/**
+ * Google Drive 탐색 및 파일/폴더 선택
+ * DriveExplorer.gs
+ */
+
+const DriveExplorer = {
+  /**
+   * 드라이브 탐색기 열기
+   */
+  openExplorer: function() {
+    const html = HtmlService.createHtmlOutputFromFile('DriveExplorer')
+      .setWidth(900)
+      .setHeight(600)
+      .setTitle('드라이브 탐색기');
+    SpreadsheetApp.getUi().showModalDialog(html, '📁 드라이브에서 선택');
+  },
+  
+  /**
+   * 루트 폴더 목록 가져오기
+   */
+  getRootFolders: function() {
+    try {
+      const folders = [];
+      
+      // 내 드라이브
+      folders.push({
+        id: 'root',
+        name: '📁 내 드라이브',
+        type: 'folder',
+        isRoot: true,
+        icon: '🏠'
+      });
+      
+      // 공유 드라이브 목록
+      try {
+        const sharedDrives = Drive.Drives.list({
+          pageSize: 100
+        });
+        
+        if (sharedDrives.items && sharedDrives.items.length > 0) {
+          sharedDrives.items.forEach(drive => {
+            folders.push({
+              id: drive.id,
+              name: '🔗 ' + drive.name,
+              type: 'shared_drive',
+              isRoot: true,
+              icon: '🔗'
+            });
+          });
+        }
+      } catch (e) {
+        console.log('공유 드라이브 접근 불가:', e);
+      }
+      
+      // 공유 문서함
+      folders.push({
+        id: 'sharedWithMe',
+        name: '👥 공유 문서함',
+        type: 'shared',
+        isRoot: true,
+        icon: '👥'
+      });
+      
+      // 최근 항목
+      folders.push({
+        id: 'recent',
+        name: '🕐 최근 항목',
+        type: 'recent',
+        isRoot: true,
+        icon: '🕐'
+      });
+      
+      return {
+        success: true,
+        items: folders
+      };
+      
+    } catch (error) {
+      return {
+        success: false,
+        error: error.toString()
+      };
+    }
+  },
+  
+  /**
+   * 폴더 내용 가져오기
+   */
+  getFolderContents: function(folderId, showType = 'all') {
+    try {
+      const items = [];
+      let query = '';
+      
+      // 폴더 ID에 따른 쿼리 설정
+      if (folderId === 'root') {
+        query = "'root' in parents and trashed = false";
+      } else if (folderId === 'sharedWithMe') {
+        query = "sharedWithMe and trashed = false";
+      } else if (folderId === 'recent') {
+        // 최근 수정된 파일들
+        const recentDate = new Date();
+        recentDate.setDate(recentDate.getDate() - 30); // 30일 이내
+        const dateString = recentDate.toISOString();
+        query = `modifiedTime > '${dateString}' and trashed = false`;
+      } else {
+        query = `'${folderId}' in parents and trashed = false`;
+      }
+      
+      // 타입별 필터 추가
+      if (showType === 'folders') {
+        query += " and mimeType = 'application/vnd.google-apps.folder'";
+      } else if (showType === 'spreadsheets') {
+        query += " and mimeType = 'application/vnd.google-apps.spreadsheet'";
+      }
+      
+      // 파일/폴더 검색
+      const files = Drive.Files.list({
+        q: query,
+        pageSize: 100,
+        fields: 'files(id, name, mimeType, modifiedTime, iconLink, parents)',
+        orderBy: 'folder,name'
+      });
+      
+      if (files.files && files.files.length > 0) {
+        files.files.forEach(file => {
+          let type = 'file';
+          let icon = '📄';
+          
+          if (file.mimeType === 'application/vnd.google-apps.folder') {
+            type = 'folder';
+            icon = '📁';
+          } else if (file.mimeType === 'application/vnd.google-apps.spreadsheet') {
+            type = 'spreadsheet';
+            icon = '📊';
+          } else if (file.mimeType === 'application/vnd.google-apps.document') {
+            icon = '📝';
+          } else if (file.mimeType === 'application/vnd.google-apps.presentation') {
+            icon = '📑';
+          }
+          
+          items.push({
+            id: file.id,
+            name: file.name,
+            type: type,
+            mimeType: file.mimeType,
+            icon: icon,
+            modifiedTime: file.modifiedTime,
+            parents: file.parents
+          });
+        });
+      }
+      
+      // 정렬: 폴더 먼저, 그 다음 파일
+      items.sort((a, b) => {
+        if (a.type === 'folder' && b.type !== 'folder') return -1;
+        if (a.type !== 'folder' && b.type === 'folder') return 1;
+        return a.name.localeCompare(b.name);
+      });
+      
+      return {
+        success: true,
+        items: items,
+        folderId: folderId
+      };
+      
+    } catch (error) {
+      return {
+        success: false,
+        error: error.toString()
+      };
+    }
+  },
+  
+  /**
+   * 스프레드시트 검색
+   */
+  searchSpreadsheets: function(searchTerm) {
+    try {
+      const query = `mimeType = 'application/vnd.google-apps.spreadsheet' and ` +
+                   `name contains '${searchTerm}' and trashed = false`;
+      
+      const files = Drive.Files.list({
+        q: query,
+        pageSize: 50,
+        fields: 'files(id, name, modifiedTime)',
+        orderBy: 'modifiedTime desc'
+      });
+      
+      const items = [];
+      if (files.files && files.files.length > 0) {
+        files.files.forEach(file => {
+          items.push({
+            id: file.id,
+            name: file.name,
+            type: 'spreadsheet',
+            icon: '📊',
+            modifiedTime: file.modifiedTime
+          });
+        });
+      }
+      
+      return {
+        success: true,
+        items: items
+      };
+      
+    } catch (error) {
+      return {
+        success: false,
+        error: error.toString()
+      };
+    }
+  },
+  
+  /**
+   * 경로 가져오기
+   */
+  getPath: function(fileId) {
+    try {
+      const path = [];
+      let currentId = fileId;
+      
+      while (currentId && currentId !== 'root') {
+        const file = Drive.Files.get(currentId, {
+          fields: 'id, name, parents'
+        });
+        
+        path.unshift({
+          id: file.id,
+          name: file.name
+        });
+        
+        if (file.parents && file.parents.length > 0) {
+          currentId = file.parents[0];
+        } else {
+          break;
+        }
+      }
+      
+      // 루트 추가
+      path.unshift({
+        id: 'root',
+        name: '내 드라이브'
+      });
+      
+      return {
+        success: true,
+        path: path
+      };
+      
+    } catch (error) {
+      return {
+        success: false,
+        error: error.toString()
+      };
+    }
+  },
+  
+  /**
+   * 선택된 항목 저장
+   */
+  saveSelection: function(selection) {
+    try {
+      const scriptProperties = PropertiesService.getScriptProperties();
+      
+      if (selection.spreadsheetId) {
+        scriptProperties.setProperty('SOURCE_SPREADSHEET_ID', selection.spreadsheetId);
+        
+        // CONFIG 업데이트
+        if (typeof CONFIG !== 'undefined') {
+          CONFIG.SOURCE_SPREADSHEET_ID = selection.spreadsheetId;
+        }
+      }
+      
+      if (selection.folderId) {
+        scriptProperties.setProperty('FOLDER_ID', selection.folderId);
+        
+        // CONFIG 업데이트
+        if (typeof CONFIG !== 'undefined') {
+          CONFIG.FOLDER_ID = selection.folderId;
+        }
+      }
+      
+      return {
+        success: true,
+        message: '설정이 저장되었습니다.',
+        spreadsheetId: selection.spreadsheetId,
+        folderId: selection.folderId
+      };
+      
+    } catch (error) {
+      return {
+        success: false,
+        error: error.toString()
+      };
+    }
+  },
+  
+  /**
+   * 현재 설정 가져오기
+   */
+  getCurrentSettings: function() {
+    try {
+      const scriptProperties = PropertiesService.getScriptProperties();
+      const spreadsheetId = scriptProperties.getProperty('SOURCE_SPREADSHEET_ID');
+      const folderId = scriptProperties.getProperty('FOLDER_ID');
+      
+      const result = {
+        spreadsheetId: spreadsheetId,
+        folderId: folderId
+      };
+      
+      // 이름 가져오기
+      if (spreadsheetId && spreadsheetId !== 'YOUR_SOURCE_SPREADSHEET_ID') {
+        try {
+          const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+          result.spreadsheetName = spreadsheet.getName();
+        } catch (e) {
+          result.spreadsheetName = '(접근 불가)';
+        }
+      }
+      
+      if (folderId && folderId !== 'YOUR_FOLDER_ID') {
+        try {
+          const folder = DriveApp.getFolderById(folderId);
+          result.folderName = folder.getName();
+        } catch (e) {
+          result.folderName = '(접근 불가)';
+        }
+      }
+      
+      return {
+        success: true,
+        settings: result
+      };
+      
+    } catch (error) {
+      return {
+        success: false,
+        error: error.toString()
+      };
+    }
+  },
+  
+  /**
+   * 폴더 생성
+   */
+  createFolder: function(parentId, folderName) {
+    try {
+      let parentFolder;
+      
+      if (parentId === 'root') {
+        parentFolder = DriveApp.getRootFolder();
+      } else {
+        parentFolder = DriveApp.getFolderById(parentId);
+      }
+      
+      const newFolder = parentFolder.createFolder(folderName);
+      
+      return {
+        success: true,
+        folder: {
+          id: newFolder.getId(),
+          name: newFolder.getName(),
+          type: 'folder',
+          icon: '📁'
+        }
+      };
+      
+    } catch (error) {
+      return {
+        success: false,
+        error: error.toString()
+      };
+    }
+  },
+  
+  /**
+   * 접근 권한 확인
+   */
+  checkPermissions: function(itemId) {
+    try {
+      let hasRead = false;
+      let hasWrite = false;
+      let itemName = '';
+      let itemType = '';
+      
+      // 파일/폴더 정보 가져오기
+      try {
+        const file = Drive.Files.get(itemId, {
+          fields: 'id, name, mimeType, capabilities'
+        });
+        
+        itemName = file.name;
+        itemType = file.mimeType === 'application/vnd.google-apps.folder' ? 'folder' : 'file';
+        
+        // capabilities 확인
+        if (file.capabilities) {
+          hasRead = file.capabilities.canRead || false;
+          hasWrite = file.capabilities.canEdit || false;
+        }
+      } catch (e) {
+        // Drive API로 실패하면 DriveApp 시도
+        try {
+          if (itemType === 'folder' || itemId.length > 30) {
+            const folder = DriveApp.getFolderById(itemId);
+            itemName = folder.getName();
+            itemType = 'folder';
+            hasRead = true;
+            
+            // 쓰기 권한 테스트
+            try {
+              const testFile = folder.createFile('test', 'test');
+              folder.removeFile(testFile);
+              DriveApp.removeFile(testFile);
+              hasWrite = true;
+            } catch (e) {
+              hasWrite = false;
+            }
+          } else {
+            const file = DriveApp.getFileById(itemId);
+            itemName = file.getName();
+            itemType = 'file';
+            hasRead = true;
+            hasWrite = file.isShareable();
+          }
+        } catch (e) {
+          // 접근 불가
+        }
+      }
+      
+      return {
+        success: true,
+        itemId: itemId,
+        itemName: itemName,
+        itemType: itemType,
+        permissions: {
+          read: hasRead,
+          write: hasWrite
+        }
+      };
+      
+    } catch (error) {
+      return {
+        success: false,
+        error: error.toString()
+      };
+    }
+  }
+};
