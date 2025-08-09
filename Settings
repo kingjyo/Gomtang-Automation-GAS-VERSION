@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    
+    .container {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+    
+    h2 {
+      color: #333;
+      margin-bottom: 20px;
+      border-bottom: 2px solid #4285f4;
+      padding-bottom: 10px;
+    }
+    
+    .form-group {
+      margin-bottom: 20px;
+    }
+    
+    label {
+      display: block;
+      margin-bottom: 5px;
+      color: #555;
+      font-weight: 500;
+    }
+    
+    input[type="text"] {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+    
+    input[type="text"]:focus {
+      outline: none;
+      border-color: #4285f4;
+      box-shadow: 0 0 0 2px rgba(66, 133, 244, 0.1);
+    }
+    
+    .help-text {
+      font-size: 12px;
+      color: #999;
+      margin-top: 5px;
+    }
+    
+    .button-group {
+      display: flex;
+      gap: 10px;
+      margin-top: 30px;
+    }
+    
+    button {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    
+    .btn-primary {
+      background: #4285f4;
+      color: white;
+    }
+    
+    .btn-primary:hover {
+      background: #357ae8;
+    }
+    
+    .btn-secondary {
+      background: #f1f3f4;
+      color: #5f6368;
+    }
+    
+    .btn-secondary:hover {
+      background: #e8eaed;
+    }
+    
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 20px;
+    }
+    
+    .loading.show {
+      display: block;
+    }
+    
+    .message {
+      padding: 10px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+      display: none;
+    }
+    
+    .message.success {
+      background: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+      display: block;
+    }
+    
+    .message.error {
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+      display: block;
+    }
+    
+    .info-box {
+      background: #e3f2fd;
+      border-left: 4px solid #2196f3;
+      padding: 15px;
+      margin-bottom: 20px;
+      border-radius: 4px;
+    }
+    
+    .info-box h3 {
+      margin-top: 0;
+      color: #1976d2;
+    }
+    
+    .info-box p {
+      margin: 5px 0;
+      color: #555;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>⚙️ 곰탕 출고 자동화 설정</h2>
+    
+    <div class="message" id="message"></div>
+    
+    <div class="info-box">
+      <h3>📌 설정 안내</h3>
+      <p>• 소스 스프레드시트 ID: 싸이버스카이 데이터가 있는 스프레드시트의 ID</p>
+      <p>• 저장 폴더 ID: 처리된 파일들을 저장할 Google Drive 폴더의 ID</p>
+      <p>• ID는 URL에서 확인할 수 있습니다.</p>
+    </div>
+    
+    <div class="form-group">
+      <label for="sourceSpreadsheetId">소스 스프레드시트 ID</label>
+      <input type="text" id="sourceSpreadsheetId" placeholder="예: 1ABC123def456...">
+      <div class="help-text">싸이버스카이 데이터가 업데이트되는 스프레드시트 ID</div>
+    </div>
+    
+    <div class="form-group">
+      <label for="folderId">저장 폴더 ID</label>
+      <input type="text" id="folderId" placeholder="예: 0B123ABC456def...">
+      <div class="help-text">처리된 파일들을 저장할 Google Drive 폴더 ID</div>
+    </div>
+    
+    <div class="form-group">
+      <label for="senderPostal">발송지 우편번호</label>
+      <input type="text" id="senderPostal" value="7505">
+    </div>
+    
+    <div class="form-group">
+      <label for="senderAddress">발송지 주소</label>
+      <input type="text" id="senderAddress" value="서울 강서구 오정로 602">
+    </div>
+    
+    <div class="loading" id="loading">
+      <div style="color: #666;">설정을 저장하는 중...</div>
+    </div>
+    
+    <div class="button-group">
+      <button class="btn-primary" onclick="saveSettings()">저장</button>
+      <button class="btn-secondary" onclick="loadSettings()">현재 설정 불러오기</button>
+      <button class="btn-secondary" onclick="closeDialog()">닫기</button>
+    </div>
+  </div>
+  
+  <script>
+    // 페이지 로드 시 현재 설정 불러오기
+    window.onload = function() {
+      loadSettings();
+    };
+    
+    function loadSettings() {
+      // 현재 설정 불러오기
+      google.script.run
+        .withSuccessHandler(function(settings) {
+          if (settings) {
+            document.getElementById('sourceSpreadsheetId').value = settings.sourceSpreadsheetId || '';
+            document.getElementById('folderId').value = settings.folderId || '';
+            document.getElementById('senderPostal').value = settings.senderPostal || '7505';
+            document.getElementById('senderAddress').value = settings.senderAddress || '서울 강서구 오정로 602';
+          }
+        })
+        .withFailureHandler(function(error) {
+          showMessage('설정을 불러오는 중 오류가 발생했습니다.', 'error');
+        })
+        .getSettings();
+    }
+    
+    function saveSettings() {
+      const settings = {
+        sourceSpreadsheetId: document.getElementById('sourceSpreadsheetId').value,
+        folderId: document.getElementById('folderId').value,
+        senderPostal: document.getElementById('senderPostal').value,
+        senderAddress: document.getElementById('senderAddress').value
+      };
+      
+      // 유효성 검사
+      if (!settings.sourceSpreadsheetId || !settings.folderId) {
+        showMessage('모든 필드를 입력해주세요.', 'error');
+        return;
+      }
+      
+      document.getElementById('loading').classList.add('show');
+      
+      google.script.run
+        .withSuccessHandler(function(result) {
+          document.getElementById('loading').classList.remove('show');
+          if (result.success) {
+            showMessage('설정이 저장되었습니다.', 'success');
+            setTimeout(closeDialog, 2000);
+          } else {
+            showMessage('저장 실패: ' + result.error, 'error');
+          }
+        })
+        .withFailureHandler(function(error) {
+          document.getElementById('loading').classList.remove('show');
+          showMessage('저장 중 오류가 발생했습니다: ' + error, 'error');
+        })
+        .saveSettings(settings);
+    }
+    
+    function closeDialog() {
+      google.script.host.close();
+    }
+    
+    function showMessage(text, type) {
+      const message = document.getElementById('message');
+      message.textContent = text;
+      message.className = 'message ' + type;
+      
+      setTimeout(function() {
+        message.classList.remove('success', 'error');
+      }, 5000);
+    }
+  </script>
+</body>
+</html>
