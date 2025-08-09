@@ -1,0 +1,312 @@
+/**
+ * 수동 업로드 처리 - 싸이버스카이 및 EDI 데이터
+ * ManualUploader.gs
+ */
+
+const ManualUploader = {
+  /**
+   * A시트(싸이버스카이) 엑셀 파일 처리
+   */
+  processASheetFile: function(fileData, fileName) {
+    try {
+      // 설정 초기화
+      initializeConfig();
+      
+      // Base64 디코딩
+      const blob = Utilities.newBlob(
+        Utilities.base64Decode(fileData), 
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 
+        fileName
+      );
+      
+      // 임시 파일로 저장
+      const tempFile = DriveApp.createFile(blob);
+      tempFile.setName('temp_a_' + fileName);
+      
+      // Google Sheets로 변환
+      const todayFull = getTodayDate();
+      const todayShort = getTodayShortDate();
+      const targetFileName = todayFull + '_간편식_싸이버스카이';
+      
+      const resource = {
+        title: targetFileName,
+        mimeType: MimeType.GOOGLE_SHEETS
+      };
+      
+      const fileId = tempFile.getId();
+      const convertedFile = Drive.Files.copy(resource, fileId);
+      
+      // 임시 파일 삭제
+      DriveApp.getFileById(fileId).setTrashed(true);
+      
+      // 변환된 스프레드시트 열기
+      const sourceSpreadsheet = SpreadsheetApp.openById(convertedFile.id);
+      
+      // YYDD 형식의 시트 찾기 (예: 0809)
+      let sourceSheet = sourceSpreadsheet.getSheetByName(todayShort);
+      
+      if (!sourceSheet) {
+        // 시트를 찾지 못하면 첫 번째 시트 사용
+        sourceSheet = sourceSpreadsheet.getSheets()[0];
+        console.log(`${todayShort} 시트를 찾을 수 없어 첫 번째 시트를 사용합니다.`);
+      }
+      
+      // 데이터 읽기
+      const data = sourceSheet.getDataRange().getValues();
+      
+      // 현재 스프레드시트에 데이터 복사
+      const currentSpreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+      
+      // 기존 시트가 있으면 삭제
+      let targetSheet = currentSpreadsheet.getSheetByName(targetFileName);
+      if (targetSheet) {
+        currentSpreadsheet.deleteSheet(targetSheet);
+      }
+      
+      // 새 시트 생성
+      targetSheet = currentSpreadsheet.insertSheet(targetFileName);
+      
+      // 데이터 입력
+      if (data.length > 0) {
+        targetSheet.getRange(1, 1, data.length, data[0].length).setValues(data);
+      }
+      
+      // 드라이브 폴더로 이동
+      this.moveToDateFolder(convertedFile.id, todayFull, targetFileName);
+      
+      return {
+        success: true,
+        message: `A시트 업로드 완료!\n${data.length}행의 데이터를 가져왔습니다.`,
+        sheetName: targetFileName,
+        rowCount: data.length
+      };
+      
+    } catch (error) {
+      return {
+        success: false,
+        error: 'A시트 처리 실패: ' + error.toString()
+      };
+    }
+  },
+  
+  /**
+   * B시트(EDI) 엑셀 파일 처리
+   */
+  processBSheetFile: function(fileData, fileName) {
+    try {
+      // 설정 초기화
+      initializeConfig();
+      
+      // Base64 디코딩
+      const blob = Utilities.newBlob(
+        Utilities.base64Decode(fileData), 
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 
+        fileName
+      );
+      
+      // 임시 파일로 저장
+      const tempFile = DriveApp.createFile(blob);
+      tempFile.setName('temp_b_' + fileName);
+      
+      // Google Sheets로 변환
+      const todayFull = getTodayDate();
+      const targetFileName = todayFull + '_간편식_EDI';
+      
+      const resource = {
+        title: targetFileName,
+        mimeType: MimeType.GOOGLE_SHEETS
+      };
+      
+      const fileId = tempFile.getId();
+      const convertedFile = Drive.Files.copy(resource, fileId);
+      
+      // 임시 파일 삭제
+      DriveApp.getFileById(fileId).setTrashed(true);
+      
+      // 변환된 스프레드시트 열기
+      const sourceSpreadsheet = SpreadsheetApp.openById(convertedFile.id);
+      
+      // empty 시트 찾기 (없으면 첫 번째 시트 사용)
+      let sourceSheet = sourceSpreadsheet.getSheetByName('empty');
+      if (!sourceSheet) {
+        sourceSheet = sourceSpreadsheet.getSheets()[0];
+      }
+      
+      // 데이터 읽기
+      const data = sourceSheet.getDataRange().getValues();
+      
+      // 현재 스프레드시트에 데이터 복사
+      const currentSpreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+      
+      // 기존 시트가 있으면 삭제
+      let targetSheet = currentSpreadsheet.getSheetByName(targetFileName);
+      if (targetSheet) {
+        currentSpreadsheet.deleteSheet(targetSheet);
+      }
+      
+      // 새 시트 생성
+      targetSheet = currentSpreadsheet.insertSheet(targetFileName);
+      
+      // 데이터 입력
+      if (data.length > 0) {
+        targetSheet.getRange(1, 1, data.length, data[0].length).setValues(data);
+      }
+      
+      // 드라이브 폴더로 이동
+      this.moveToDateFolder(convertedFile.id, todayFull, targetFileName);
+      
+      return {
+        success: true,
+        message: `B시트(EDI) 업로드 완료!\n${data.length}행의 데이터를 가져왔습니다.`,
+        sheetName: targetFileName,
+        rowCount: data.length
+      };
+      
+    } catch (error) {
+      return {
+        success: false,
+        error: 'B시트 처리 실패: ' + error.toString()
+      };
+    }
+  },
+  
+  /**
+   * A시트와 B시트 모두 업로드 후 자동 처리
+   */
+  processBothFiles: function(aFileData, aFileName, bFileData, bFileName) {
+    try {
+      // A시트 처리
+      const aResult = this.processASheetFile(aFileData, aFileName);
+      if (!aResult.success) {
+        return aResult;
+      }
+      
+      // B시트 처리
+      const bResult = this.processBSheetFile(bFileData, bFileName);
+      if (!bResult.success) {
+        return bResult;
+      }
+      
+      // 데이터 처리 실행
+      const processResult = DataProcessor.processData();
+      if (!processResult.success) {
+        return {
+          success: false,
+          error: '데이터 처리 실패: ' + processResult.error
+        };
+      }
+      
+      // 검산 실행
+      const verifyResult = Verification.runVerification();
+      
+      return {
+        success: true,
+        message: `✅ 모든 처리 완료!\n\nA시트: ${aResult.rowCount}행\nB시트: ${bResult.rowCount}행\n처리된 데이터: ${processResult.processedRows}행\n검산: ${verifyResult.success ? '성공' : '실패'}`
+      };
+      
+    } catch (error) {
+      return {
+        success: false,
+        error: '통합 처리 실패: ' + error.toString()
+      };
+    }
+  },
+  
+  /**
+   * 파일을 날짜 폴더로 이동
+   */
+  moveToDateFolder: function(fileId, dateString, fileName) {
+    try {
+      const file = DriveApp.getFileById(fileId);
+      const parentFolderId = CONFIG.FOLDER_ID;
+      
+      if (!parentFolderId || parentFolderId === 'YOUR_FOLDER_ID') {
+        console.log('폴더 ID가 설정되지 않아 루트 폴더에 저장됩니다.');
+        return;
+      }
+      
+      const parentFolder = DriveApp.getFolderById(parentFolderId);
+      
+      // 날짜 폴더 생성 또는 가져오기
+      const folders = parentFolder.getFoldersByName(dateString);
+      let dateFolder;
+      
+      if (folders.hasNext()) {
+        dateFolder = folders.next();
+      } else {
+        dateFolder = parentFolder.createFolder(dateString);
+      }
+      
+      // 같은 이름의 기존 파일이 있으면 삭제
+      const existingFiles = dateFolder.getFilesByName(fileName);
+      while (existingFiles.hasNext()) {
+        const existingFile = existingFiles.next();
+        existingFile.setTrashed(true);
+      }
+      
+      // 파일 이동
+      dateFolder.addFile(file);
+      
+      // 원래 위치에서 제거
+      const parents = file.getParents();
+      while (parents.hasNext()) {
+        const parent = parents.next();
+        if (parent.getId() !== dateFolder.getId()) {
+          parent.removeFile(file);
+        }
+      }
+      
+      console.log(`파일이 ${dateString} 폴더로 이동되었습니다.`);
+      
+    } catch (error) {
+      console.error('파일 이동 실패:', error);
+    }
+  },
+  
+  /**
+   * 업로드 상태 확인
+   */
+  checkUploadStatus: function() {
+    try {
+      const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+      const sheets = spreadsheet.getSheets();
+      
+      let aSheet = null;
+      let bSheet = null;
+      let cSheet = null;
+      
+      // 가장 최근의 시트들 찾기
+      for (const sheet of sheets) {
+        const name = sheet.getName();
+        if (!name.startsWith('TEST_') && !name.startsWith('샘플_')) {
+          if (name.includes('_간편식_싸이버스카이') && !aSheet) {
+            aSheet = sheet;
+          }
+          if (name.includes('_간편식_EDI') && !bSheet) {
+            bSheet = sheet;
+          }
+          if (name.includes(' 간편식 수기송장') && !cSheet) {
+            cSheet = sheet;
+          }
+        }
+      }
+      
+      return {
+        aSheet: aSheet ? true : false,
+        bSheet: bSheet ? true : false,
+        cSheet: cSheet ? true : false,
+        aSheetRows: aSheet ? aSheet.getLastRow() : 0,
+        bSheetRows: bSheet ? bSheet.getLastRow() : 0,
+        cSheetRows: cSheet ? cSheet.getLastRow() : 0
+      };
+      
+    } catch (error) {
+      return {
+        aSheet: false,
+        bSheet: false,
+        cSheet: false,
+        error: error.toString()
+      };
+    }
+  }
+};
