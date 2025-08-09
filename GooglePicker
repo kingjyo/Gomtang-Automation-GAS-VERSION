@@ -1,31 +1,43 @@
 /**
- * Google Picker 기반 파일/폴더 선택기 (큰 창/한글/UI 안전부팅)
+ * Google Picker 기반 파일/폴더 선택기 (좌측 내비게이션 지원)
  * 파일명: GooglePicker.gs
  */
 
 function __init_setPickerConfigOnce() {
   const props = PropertiesService.getScriptProperties();
-  // ↓ 콘솔에서 복사한 "전체" 키 그대로 넣으세요 (… 쓰지 말기)
-  props.setProperty('PICKER_API_KEY', 'AIzaSyBkzoaHZmYgrH9yOkr8dI3GXGM0RyxDABc');
-  props.setProperty('GCP_PROJECT_NUMBER', '840962145115');
+  // 이미 저장해둔 값 사용해도 됩니다.
+  props.setProperty('PICKER_API_KEY', 'YOUR_PICKER_API_KEY');
+  props.setProperty('GCP_PROJECT_NUMBER', 'YOUR_GCP_PROJECT_NUMBER');
   SpreadsheetApp.getUi().alert('Picker 설정값 저장 완료');
 }
 
 function openGooglePicker() {
   const html = HtmlService.createTemplateFromFile('PickerDialog').evaluate()
-    .setWidth(1100)   // 모달 자체를 크게
+    .setWidth(1100)
     .setHeight(760)
     .setTitle('구글 드라이브 파일/폴더 선택');
   SpreadsheetApp.getUi().showModalDialog(html, '📁 구글 드라이브 설정');
 }
 
-/** HTML include 헬퍼 (템플릿에서 사용) */
+/** HTML include 헬퍼 */
 function include(name) {
   return HtmlService.createHtmlOutputFromFile(name).getContent();
 }
 
-/** 일부 도메인에서 Drive root 접근 500 회피 → no-op */
-function ensureDriveScope() { return true; }
+/**
+ * ✅ Drive 스코프 강제 워밍업
+ * - getOAuthToken() 호출 전에 반드시 실행
+ * - 최소 권한 접근으로 스코프만 획득 (실제 파일 읽지 않음)
+ */
+function ensureDriveScope() {
+  try {
+    // root ID만 터치해서 권한 승인 유도
+    DriveApp.getRootFolder().getId();
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+}
 
 function getOAuthToken() {
   try { return ScriptApp.getOAuthToken(); }
@@ -36,7 +48,7 @@ function getPickerApiKey() {
   return PropertiesService.getScriptProperties().getProperty('PICKER_API_KEY') || '';
 }
 
-function getPickerAppId() { // 선택
+function getPickerAppId() { // 선택(없어도 동작)
   return PropertiesService.getScriptProperties().getProperty('GCP_PROJECT_NUMBER') || '';
 }
 
@@ -59,7 +71,7 @@ function pingServer() {
   return { ok: true, ts: new Date().toISOString() };
 }
 
-/** 이름 포함(권한 필요) */
+/** 이름 포함(Drive 권한 필요, 실패해도 무시) */
 function getCurrentPickerSettings() {
   const p = PropertiesService.getScriptProperties();
   const ssId = p.getProperty('SOURCE_SPREADSHEET_ID') || '';

@@ -1,13 +1,11 @@
 <script>
-  // ===== 상태 =====
   let oauthToken = '';
   let developerKey = '';
-  let appId = ''; // 선택
+  let appId = '';
   let selectedSpreadsheet = null;
   let selectedFolder = null;
   let isReady = false;
 
-  // ===== 유틸 =====
   const qs = (id) => document.getElementById(id);
   const disablePickButtons = (disabled) =>
     document.querySelectorAll('.btn.pick').forEach(b => b.disabled = disabled);
@@ -25,12 +23,6 @@
     return true;
   }
 
-  function getSpreadsheetMimeFilter() {
-    const onlySheets = qs('filterSheetsOnly')?.checked;
-    return onlySheets ? 'application/vnd.google-apps.spreadsheet' : '';
-  }
-
-  // ===== 화면 표시 =====
   function updateDisplay(settings) {
     const ssDiv = qs('selectedSpreadsheet');
     const fdDiv = qs('selectedFolder');
@@ -68,7 +60,6 @@
     qs('saveBtn').disabled = !(selectedSpreadsheet && selectedFolder);
   }
 
-  // ===== 이름 보강(권한 필요, 실패해도 무시) =====
   function hydrateNames() {
     google.script.run
       .withSuccessHandler(function (res) {
@@ -84,38 +75,31 @@
   function pickSpreadsheet() {
     if (!ensureReadyOrWarn()) return;
 
-    const mime = getSpreadsheetMimeFilter();
-
-    // 탭1: 내 드라이브(내 소유)
-    const mySheets = new google.picker.DocsView(google.picker.ViewId.SPREADSHEETS)
-      .setOwnedByMe(true)
+    const sheetsView = new google.picker.DocsView(google.picker.ViewId.SPREADSHEETS)
       .setMode(google.picker.DocsViewMode.LIST);
-    if (mime) mySheets.setMimeTypes(mime);
-
-    // 탭2: 공유 드라이브 포함(전체)
-    const sharedSheets = new google.picker.DocsView(google.picker.ViewId.SPREADSHEETS)
-      .setMode(google.picker.DocsViewMode.LIST);
-    if (mime) sharedSheets.setMimeTypes(mime);
 
     const builder = new google.picker.PickerBuilder()
-      .addView(mySheets)
-      .addView(sharedSheets)
+      .addView(sheetsView)
       .setLocale('ko')
-      .setSize(1051, 650)                             // Picker 최대 크기
+      .setSize(1051, 650)
       .enableFeature(google.picker.Feature.SUPPORT_DRIVES)
       .setOAuthToken(oauthToken)
       .setDeveloperKey(developerKey)
-      .setOrigin(google.script.host.origin);
+      .setOrigin(google.script.host.origin)
+      .setSelectableMimeTypes('application/vnd.google-apps.spreadsheet');
 
-    if (mime) builder.setSelectableMimeTypes(mime);
     if (appId) builder.setAppId(appId);
 
     builder.setCallback(function (data) {
       if (data[google.picker.Response.ACTION] === google.picker.Action.PICKED) {
         const file = data[google.picker.Response.DOCUMENTS][0];
-        selectedSpreadsheet = { id: file[google.picker.Document.ID], name: file[google.picker.Document.NAME] };
-        qs('selectedSpreadsheet').textContent = selectedSpreadsheet.name;
-        qs('selectedSpreadsheet').classList.remove('empty');
+        selectedSpreadsheet = {
+          id: file[google.picker.Document.ID],
+          name: file[google.picker.Document.NAME]
+        };
+        const el = qs('selectedSpreadsheet');
+        el.textContent = selectedSpreadsheet.name;
+        el.classList.remove('empty');
         updateSaveButton();
       }
     }).build().setVisible(true);
@@ -125,20 +109,13 @@
   function pickFolder() {
     if (!ensureReadyOrWarn()) return;
 
-    const myFolders = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
-      .setOwnedByMe(true)
-      .setIncludeFolders(true)
-      .setSelectFolderEnabled(true)
-      .setMode(google.picker.DocsViewMode.LIST);
-
-    const sharedFolders = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
+    const foldersView = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
       .setIncludeFolders(true)
       .setSelectFolderEnabled(true)
       .setMode(google.picker.DocsViewMode.LIST);
 
     const builder = new google.picker.PickerBuilder()
-      .addView(myFolders)
-      .addView(sharedFolders)
+      .addView(foldersView)
       .setLocale('ko')
       .setSize(1051, 650)
       .enableFeature(google.picker.Feature.SUPPORT_DRIVES)
@@ -151,15 +128,18 @@
     builder.setCallback(function (data) {
       if (data[google.picker.Response.ACTION] === google.picker.Action.PICKED) {
         const file = data[google.picker.Response.DOCUMENTS][0];
-        selectedFolder = { id: file[google.picker.Document.ID], name: file[google.picker.Document.NAME] };
-        qs('selectedFolder').textContent = selectedFolder.name;
-        qs('selectedFolder').classList.remove('empty');
+        selectedFolder = {
+          id: file[google.picker.Document.ID],
+          name: file[google.picker.Document.NAME]
+        };
+        const el = qs('selectedFolder');
+        el.textContent = selectedFolder.name;
+        el.classList.remove('empty');
         updateSaveButton();
       }
     }).build().setVisible(true);
   }
 
-  // ===== 저장 =====
   function saveSettings() {
     if (!selectedSpreadsheet || !selectedFolder) {
       alert('스프레드시트와 폴더를 모두 선택해주세요.');
@@ -183,12 +163,11 @@
       .savePickerSelection(selection);
   }
 
-  // ===== 부팅 =====
+  // ===== 부팅 순서: 서버 핑 → ✅Drive 스코프 워밍업 → 토큰 → 키 → AppId → Lite 설정 → 이름 보강
   function boot() {
     qs('loading').classList.add('show');
     disablePickButtons(true);
 
-    // gapi 로드 타임아웃(8초)
     const gapiTimer = setTimeout(() => {
       showContent();
       alert('Google API 로드가 지연됩니다. 네트워크/차단(apis.google.com) 확인 후 다시 시도하세요.');
@@ -198,39 +177,47 @@
       callback: function () {
         clearTimeout(gapiTimer);
 
-        // 서버 핑(네트워크/세션 확인)
         google.script.run
           .withSuccessHandler(function () {
-            // 토큰 → API키 → AppId → Lite 설정 → 이름 보강
-            google.script.run.withSuccessHandler(function (token) {
-              oauthToken = token || '';
 
-              google.script.run.withSuccessHandler(function (key) {
-                developerKey = key || '';
+            // 1) ✅ Drive 스코프 워밍업 (권한 승인 유도)
+            google.script.run.withSuccessHandler(function () {
 
-                google.script.run.withSuccessHandler(function (id) {
-                  appId = id || '';
+              // 2) 토큰
+              google.script.run.withSuccessHandler(function (token) {
+                oauthToken = token || '';
 
-                  google.script.run
-                    .withSuccessHandler(function (res) {
-                      showContent();
-                      if (res?.success) updateDisplay(res.settings);
-                      isReady = !!(oauthToken && developerKey);
-                      disablePickButtons(!isReady);
-                      hydrateNames(); // 실패해도 무시
-                    })
-                    .withFailureHandler(function (err) {
-                      showContent();
-                      alert('설정을 불러오는 중 오류가 발생했습니다.');
-                      console.error(err);
-                    })
-                    .getCurrentPickerSettingsLite();
+                // 3) API 키
+                google.script.run.withSuccessHandler(function (key) {
+                  developerKey = key || '';
 
-                }).getPickerAppId();
+                  // 4) AppId (선택)
+                  google.script.run.withSuccessHandler(function (id) {
+                    appId = id || '';
 
-              }).getPickerApiKey();
+                    // 5) 설정 표시
+                    google.script.run
+                      .withSuccessHandler(function (res) {
+                        showContent();
+                        if (res?.success) updateDisplay(res.settings);
+                        isReady = !!(oauthToken && developerKey);
+                        disablePickButtons(!isReady);
+                        hydrateNames(); // 실패해도 무시
+                      })
+                      .withFailureHandler(function (err) {
+                        showContent();
+                        alert('설정을 불러오는 중 오류가 발생했습니다.');
+                        console.error(err);
+                      })
+                      .getCurrentPickerSettingsLite();
 
-            }).getOAuthToken();
+                  }).getPickerAppId();
+
+                }).getPickerApiKey();
+
+              }).getOAuthToken();
+
+            }).ensureDriveScope()
 
           })
           .withFailureHandler(function (err) {
@@ -243,6 +230,5 @@
     });
   }
 
-  // 안전: onload 등록
   window.addEventListener('load', boot);
 </script>

@@ -33,17 +33,18 @@ function onOpen() {
     .addItem('📧 오늘 EDI 업데이트', 'updateTodayEDI')
     .addItem('⚡ 싸이버스카이, EDI 동시 업데이트', 'updateBoth')
     .addSeparator()
+    .addItem('⚙️ 데이터 처리 실행', 'runDataProcessor')
     .addItem('🧮 검산 실행', 'runVerification')
     .addItem('📊 품목별 시트 분리', 'splitByProduct')
     .addSeparator()
     .addItem('🛍️ 쿠팡 데이터 업로더 열기', 'openCoupangUploader')
     .addItem('📤 수동 데이터 업로더 열기', 'openManualUploader')
+    .addItem('📁 드라이브로 초기 설정', 'openGooglePicker')
     .addSeparator()
-    .addItem('🎯 초기 설정 실행', 'runInitialSetup')
     .addItem('⏰ 자동 실행 설정', 'setupTriggers')
     .addItem('🔧 설정', 'openSettings')
     .addSeparator()
-    .addItem('🧪 테스트 - 최근 EDI 가져오기 (0728)', 'testGetRecentEDI')
+    .addItem('🧪 테스트 - 최근 EDI 가져오기', 'testGetRecentEDI')
     .addItem('🧪 테스트 - 자동 업데이트 실행', 'testDailyUpdate')
     .addItem('🧪 테스트 - 템플릿 시트 초기화', 'clearTemplates')
     .addToUi();
@@ -365,12 +366,6 @@ function cleanTestSheets() {
   TestFunctions.cleanTestSheets();
 }
 
-/**
- * 초기 설정 실행
- */
-function runInitialSetup() {
-  InitialSetup.runInitialSetup();
-}
 
 /**
  * 템플릿 시트 초기화
@@ -379,16 +374,27 @@ function clearTemplates() {
   const ui = SpreadsheetApp.getUi();
   const response = ui.alert(
     '⚠️ 템플릿 초기화',
-    '모든 템플릿 시트를 삭제하시겠습니까?\n(샘플 시트, 설명서 등이 모두 삭제됩니다)',
+    '샘플로 시작하는 모든 시트를 삭제하시겠습니까?\n(샘플 시트, 설명서 등이 모두 삭제됩니다)',
     ui.ButtonSet.YES_NO
   );
   
   if (response === ui.Button.YES) {
-    const result = InitialSetup.clearAllTemplates();
-    if (result.success) {
-      ui.alert('✅ ' + result.message);
-    } else {
-      ui.alert('❌ 초기화 실패: ' + result.error);
+    try {
+      const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+      const sheets = spreadsheet.getSheets();
+      let deletedCount = 0;
+      
+      for (const sheet of sheets) {
+        const name = sheet.getName();
+        if (name.startsWith('샘플') || name.includes('설명') || name.includes('템플릿')) {
+          spreadsheet.deleteSheet(sheet);
+          deletedCount++;
+        }
+      }
+      
+      ui.alert(`✅ ${deletedCount}개의 템플릿 시트를 삭제했습니다.`);
+    } catch (error) {
+      ui.alert('❌ 초기화 실패: ' + error.toString());
     }
   }
 }
