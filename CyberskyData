@@ -1,0 +1,221 @@
+/**
+ * 싸이버스카이 데이터 처리
+ * CyberskyData.gs
+ */
+
+const CyberskyData = {
+  /**
+   * 싸이버스카이 데이터 업데이트 (오늘 날짜)
+   */
+  updateCyberskyData: function() {
+    const todayShort = getTodayShortDate();
+    return this.updateCyberskyDataForDate(todayShort);
+  },
+  
+  /**
+   * 싸이버스카이 데이터 업데이트 (날짜 지정)
+   */
+  updateCyberskyDataForDate: function(dateString) {
+    try {
+      // 설정 초기화
+      if (typeof initializeConfig === 'function') {
+        initializeConfig();
+      }
+      
+      const sourceSpreadsheetId = CONFIG.SOURCE_SPREADSHEET_ID;
+      
+      if (!sourceSpreadsheetId || sourceSpreadsheetId === 'YOUR_SOURCE_SPREADSHEET_ID') {
+        return {
+          success: false,
+          error: '먼저 설정에서 소스 스프레드시트 ID를 입력해주세요.'
+        };
+      }
+      
+      const sourceSpreadsheet = SpreadsheetApp.openById(sourceSpreadsheetId);
+      
+      // 날짜 형식 처리 (MMDD 또는 YYYYMMDD)
+      let targetDate = dateString;
+      let fullDate = '';
+      
+      if (dateString.length === 4) {
+        // MMDD 형식
+        targetDate = dateString;
+        const year = new Date().getFullYear();
+        fullDate = year + dateString;
+      } else if (dateString.length === 8) {
+        // YYYYMMDD 형식
+        targetDate = dateString.substring(4); // MMDD 추출
+        fullDate = dateString;
+      } else {
+        // 기본값: 오늘 날짜
+        targetDate = getTodayShortDate();
+        fullDate = getTodayDate();
+      }
+      
+      const sourceSheet = sourceSpreadsheet.getSheetByName(targetDate);
+      
+      if (!sourceSheet) {
+        return {
+          success: false,
+          error: `소스 스프레드시트에서 ${targetDate} 시트를 찾을 수 없습니다.`
+        };
+      }
+      
+      // 현재 스프레드시트에서 시트 생성 또는 업데이트
+      const currentSpreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+      const targetSheetName = fullDate + '_간편식_싸이버스카이';
+      
+      // 기존 시트가 있으면 삭제
+      let targetSheet = currentSpreadsheet.getSheetByName(targetSheetName);
+      if (targetSheet) {
+        currentSpreadsheet.deleteSheet(targetSheet);
+      }
+      
+      // 새 시트 생성
+      targetSheet = currentSpreadsheet.insertSheet(targetSheetName);
+      
+      // 데이터 복사
+      const sourceData = sourceSheet.getDataRange().getValues();
+      if (sourceData.length > 0) {
+        targetSheet.getRange(1, 1, sourceData.length, sourceData[0].length).setValues(sourceData);
+      }
+      
+      // 드라이브 폴더에도 저장
+      this.saveToGoogleDrive(targetSheetName, sourceData);
+      
+      return {
+        success: true,
+        sheetName: targetSheetName,
+        rowCount: sourceData.length,
+        date: targetDate
+      };
+      
+    } catch (error) {
+      return {
+        success: false,
+        error: error.toString()
+      };
+    }
+  },
+  
+  /**
+   * Google Drive에 스프레드시트로 저장
+   */
+  saveToGoogleDrive: function(fileName, data) {
+    try {
+      const folderId = CONFIG.FOLDER_ID;
+      
+      // 파일 이름에서 날짜 추출
+      let datePrefix = fileName.split('_')[0];
+      if (datePrefix.length !== 8) {
+        datePrefix = getTodayDate();
+      }
+      
+      // 오늘 날짜 폴더 생성 또는 찾기
+      const folder = this.getOrCreateFolder(folderId, datePrefix);
+      
+      // 새 스프레드시트 생성
+      const newSpreadsheet = SpreadsheetApp.create(fileName);
+      const sheet = newSpreadsheet.getActiveSheet();
+      
+      // 데이터 입력
+      if (data.length > 0) {
+        sheet.getRange(1, 1, data.length, data[0].length).setValues(data);
+      }
+      
+      // 파일을 폴더로 이동
+      const file = DriveApp.getFileById(newSpreadsheet.getId());
+      folder.addFile(file);
+      DriveApp.getRootFolder().removeFile(file);
+      
+      return newSpreadsheet.getId();
+      
+    } catch (error) {
+      console.error('Drive 저장 실패:', error);
+      // 폴더 ID가 설정되지 않은 경우 그냥 진행
+      return null;
+    }
+  },
+  
+  /**
+   * 폴더 생성 또는 가져오기
+   */
+  getOrCreateFolder: function(parentFolderId, folderName) {
+    try {
+      if (!parentFolderId || parentFolderId === 'YOUR_FOLDER_ID') {
+        // 폴더 ID가 설정되지 않은 경우 루트 폴더 사용
+        return DriveApp.getRootFolder();
+      }
+      
+      const parentFolder = DriveApp.getFolderById(parentFolderId);
+      const folders = parentFolder.getFoldersByName(folderName);
+      
+      if (folders.hasNext()) {
+        return folders.next();
+      } else {
+        return parentFolder.createFolder(folderName);
+      }
+    } catch (error) {
+      console.error('폴더 생성/가져오기 실패:', error);
+      return DriveApp.getRootFolder();
+    }
+  },
+  
+  /**
+   * A시트 데이터 가져오기 (데이터 처리용)
+   */
+  getSheetAData: function() {
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    
+    // 가능한 시트 이름들 찾기 (날짜 지정 또는 오늘 날짜)
+    const sheets = spreadsheet.getSheets();
+    let aSheet = null;
+    
+    // _간편식_싸이버스카이로 끝나는 가장 최근 시트 찾기
+    for (const sheet of sheets) {
+      const name = sheet.getName();
+      if (name.includes('_간편식_싸이버스카이') && !name.startsWith('TEST_') && !name.startsWith('샘플_')) {
+        aSheet = sheet;
+        break;
+      }
+    }
+    
+    if (!aSheet) {
+      // 오늘 날짜 시트 시도
+      const todayFull = getTodayDate();
+      const sheetName = todayFull + '_간편식_싸이버스카이';
+      aSheet = spreadsheet.getSheetByName(sheetName);
+    }
+    
+    if (!aSheet) {
+      throw new Error('A시트를 찾을 수 없습니다. 먼저 싸이버스카이 데이터를 업데이트하세요.');
+    }
+    
+    return aSheet.getDataRange().getValues();
+  },
+  
+  /**
+   * A시트 열 인덱스 매핑
+   */
+  getSheetAColumnMapping: function(headers) {
+    const mapping = {};
+    headers.forEach((header, index) => {
+      mapping[header] = index;
+    });
+    
+    // 필수 열 확인
+    const requiredColumns = [
+      'MEM_ID', 'ORDER_IDX', 'GROUP_IDX', 'PROD_NAME', 
+      'ORDERCNT', 'ORDERER', 'PHONE', 'RECEIVER', 
+      'CELL', 'POST_NO', 'ADDR1', 'ADDR2', 'DELYMONEY'
+    ];
+    
+    for (const col of requiredColumns) {
+      if (!(col in mapping)) {
+        console.warn(`A시트에 ${col} 열이 없습니다.`);
+      }
+    }
+    
+    return mapping;
+  }
+};
