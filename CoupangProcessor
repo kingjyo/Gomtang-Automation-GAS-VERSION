@@ -1,0 +1,278 @@
+/**
+ * 쿠팡 데이터 처리
+ * CoupangProcessor.gs
+ */
+
+const CoupangProcessor = {
+  /**
+   * 쿠팡 엑셀 파일 처리 (HTML에서 호출)
+   */
+  processCoupangFile: function(fileData, fileName) {
+    try {
+      // Base64 디코딩
+      const blob = Utilities.newBlob(Utilities.base64Decode(fileData), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', fileName);
+      
+      // 임시 파일로 저장
+      const tempFile = DriveApp.createFile(blob);
+      tempFile.setName('temp_coupang_' + fileName);
+      
+      // Google Sheets로 변환
+      const todayFull = getTodayDate();
+      const resource = {
+        title: todayFull + '_간편식_쿠팡',
+        mimeType: MimeType.GOOGLE_SHEETS
+      };
+      
+      const fileId = tempFile.getId();
+      const convertedFile = Drive.Files.copy(resource, fileId);
+      
+      // 임시 파일 삭제
+      DriveApp.getFileById(fileId).setTrashed(true);
+      
+      // 변환된 스프레드시트 열기
+      const coupangSpreadsheet = SpreadsheetApp.openById(convertedFile.id);
+      const deliverySheet = coupangSpreadsheet.getSheetByName('Delivery') || coupangSpreadsheet.getSheets()[0];
+      
+      // 데이터 읽기
+      const coupangData = deliverySheet.getDataRange().getValues();
+      
+      // 쿠팡 데이터를 수기송장에 추가
+      const result = this.addCoupangDataToManualInvoice(coupangData);
+      
+      // 드라이브 폴더로 이동
+      this.moveCoupangFileToFolder(convertedFile.id, todayFull);
+      
+      return result;
+      
+    } catch (error) {
+      return {
+        success: false,
+        error: error.toString()
+      };
+    }
+  },
+  
+  /**
+   * 쿠팡 데이터를 수기송장에 추가
+   */
+  addCoupangDataToManualInvoice: function(coupangData) {
+    try {
+      const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+      
+      // 날짜 추출
+      let datePrefix = getTodayDate();
+      const sheets = spreadsheet.getSheets();
+      
+      for (const sheet of sheets) {
+        const name = sheet.getName();
+        if (name.includes(' 간편식 수기송장') && !name.startsWith('TEST_')) {
+          datePrefix = name.split(' ')[0];
+          break;
+        }
+      }
+      
+      const manualSheetName = datePrefix + ' 간편식 수기송장';
+      
+      const manualSheet = spreadsheet.getSheetByName(manualSheetName);
+      if (!manualSheet) {
+        throw new Error('수기송장 시트를 찾을 수 없습니다: ' + manualSheetName);
+      }
+      
+      // 쿠팡 데이터 헤더와 열 매핑
+      const coupangHeaders = coupangData[0];
+      const coupangRows = coupangData.slice(1);
+      const coupangMapping = this.getCoupangColumnMapping(coupangHeaders);
+      
+      // 수기송장 헤더 매핑
+      const manualHeaders = manualSheet.getRange(1, 1, 1, manualSheet.getLastColumn()).getValues()[0];
+      const manualMapping = this.getManualColumnMapping(manualHeaders);
+      
+      // 변환된 데이터 생성
+      const newRows = [];
+      for (const row of coupangRows) {
+        if (!row[coupangMapping.productName]) continue;
+        
+        const convertedRow = this.convertCoupangRow(row, coupangMapping, manualHeaders.length);
+        if (convertedRow) {
+          newRows.push(convertedRow);
+        }
+      }
+      
+      // 수기송장에 데이터 추가
+      if (newRows.length > 0) {
+        const lastRow = manualSheet.getLastRow();
+        manualSheet.getRange(lastRow + 1, 1, newRows.length, newRows[0].length).setValues(newRows);
+      }
+      
+      return {
+        success: true,
+        rowsAdded: newRows.length,
+        message: `쿠팡 데이터 ${newRows.length}행이 추가되었습니다.`
+      };
+      
+    } catch (error) {
+      return {
+        success: false,
+        error: error.toString()
+      };
+    }
+  },
+  
+  /**
+   * 쿠팡 열 매핑
+   */
+  getCoupangColumnMapping: function(headers) {
+    const mapping = {};
+    
+    // 헤더로 찾기
+    headers.forEach((header, index) => {
+      const cleanHeader = String(header).trim();
+      
+      // P열: 상품명
+      if (index === 15 || cleanHeader.includes('제동한우') || cleanHeader.includes('상품명')) {
+        mapping.productName = index;
+      }
+      // W열: 구매수(수량)
+      if (index === 22 || cleanHeader === '구매수' || cleanHeader === '수량') {
+        mapping.quantity = index;
+      }
+      // Y열: 구매자
+      if (index === 24 || cleanHeader === '구매자') {
+        mapping.buyer = index;
+      }
+      // Z열: 구매자전화번호
+      if (index === 25 || cleanHeader === '구매자전화번호') {
+        mapping.buyerPhone = index;
+      }
+      // AA열: 수취인이름
+      if (index === 26 || cleanHeader === '수취인이름' || cleanHeader === '수취인') {
+        mapping.receiverName = index;
+      }
+      // AB열: 수취인전화번호
+      if (index === 27 || cleanHeader === '수취인전화번호') {
+        mapping.receiverPhone = index;
+      }
+      // AC열: 우편번호
+      if (index === 28 || cleanHeader === '우편번호') {
+        mapping.postalCode = index;
+      }
+      // AD열: 수취인 주소
+      if (index === 29 || cleanHeader.includes('수취인') && cleanHeader.includes('주소')) {
+        mapping.address = index;
+      }
+    });
+    
+    // 인덱스로 보정 (헤더를 못 찾았을 경우)
+    if (!mapping.productName) mapping.productName = 15; // P열
+    if (!mapping.quantity) mapping.quantity = 22; // W열
+    if (!mapping.buyer) mapping.buyer = 24; // Y열
+    if (!mapping.buyerPhone) mapping.buyerPhone = 25; // Z열
+    if (!mapping.receiverName) mapping.receiverName = 26; // AA열
+    if (!mapping.receiverPhone) mapping.receiverPhone = 27; // AB열
+    if (!mapping.postalCode) mapping.postalCode = 28; // AC열
+    if (!mapping.address) mapping.address = 29; // AD열
+    
+    return mapping;
+  },
+  
+  /**
+   * 수기송장 열 매핑
+   */
+  getManualColumnMapping: function(headers) {
+    const mapping = {};
+    
+    headers.forEach((header, index) => {
+      if (header === '보내시는 분') mapping.senderName = index;
+      if (header === '보내시는 분 전화') mapping.senderPhone = index;
+      if (header === '받으시는 분') mapping.receiverName = index;
+      if (header === '받으시는 분 전화') mapping.receiverPhone1 = index;
+      if (header === '받는분핸드폰') mapping.receiverPhone2 = index;
+      if (header === '받는분우편번호') mapping.postalCode = index;
+      if (header === '받는분총주소') mapping.address = index;
+      if (header === '수량') mapping.quantity = index;
+      if (header === '품목명') mapping.productName = index;
+    });
+    
+    // 기본값 설정 (찾지 못한 경우)
+    if (mapping.senderName === undefined) mapping.senderName = 0; // A열
+    if (mapping.senderPhone === undefined) mapping.senderPhone = 1; // B열
+    if (mapping.receiverName === undefined) mapping.receiverName = 6; // G열
+    if (mapping.receiverPhone1 === undefined) mapping.receiverPhone1 = 7; // H열
+    if (mapping.receiverPhone2 === undefined) mapping.receiverPhone2 = 9; // J열
+    if (mapping.postalCode === undefined) mapping.postalCode = 10; // K열
+    if (mapping.address === undefined) mapping.address = 11; // L열
+    if (mapping.quantity === undefined) mapping.quantity = 12; // M열
+    if (mapping.productName === undefined) mapping.productName = 13; // N열
+    
+    return mapping;
+  },
+  
+  /**
+   * 쿠팡 행 변환
+   */
+  convertCoupangRow: function(coupangRow, coupangMapping, numColumns) {
+    const productNameRaw = String(coupangRow[coupangMapping.productName] || '');
+    
+    // 상품명 변환
+    let convertedProductName = '';
+    if (productNameRaw.includes('사골고기곰탕') && productNameRaw.includes('5개')) {
+      convertedProductName = '제동 사골고기곰탕(5팩 1세트)';
+    } else if (productNameRaw.includes('사골곰탕') && productNameRaw.includes('5개')) {
+      convertedProductName = '제동 사골곰탕(5팩 1세트)';
+    } else if (productNameRaw.includes('사골곰탕') && productNameRaw.includes('10개')) {
+      convertedProductName = '제동 사골곰탕(10팩 1세트)';
+    } else if (productNameRaw.includes('사골곰탕') && productNameRaw.includes('20개')) {
+      convertedProductName = '제동 사골곰탕(20팩 1세트)';
+    } else if (productNameRaw.includes('육포') && productNameRaw.includes('5개')) {
+      convertedProductName = '제동한우 육포(5팩 1세트)';
+    } else {
+      // 변환할 수 없는 상품은 건너뛰기
+      return null;
+    }
+    
+    // 새 행 생성
+    const newRow = new Array(numColumns).fill('');
+    
+    newRow[0] = coupangRow[coupangMapping.buyer] || ''; // A: 보내시는 분
+    newRow[1] = coupangRow[coupangMapping.buyerPhone] || ''; // B: 보내시는 분 전화
+    newRow[4] = CONFIG.SENDER_POSTAL_CODE; // E: 보내는분우편번호
+    newRow[5] = CONFIG.SENDER_ADDRESS; // F: 보내는분총주소
+    newRow[6] = coupangRow[coupangMapping.receiverName] || ''; // G: 받으시는 분
+    newRow[7] = coupangRow[coupangMapping.receiverPhone] || ''; // H: 받으시는 분 전화
+    newRow[9] = coupangRow[coupangMapping.receiverPhone] || ''; // J: 받는분핸드폰
+    newRow[10] = coupangRow[coupangMapping.postalCode] || ''; // K: 받는분우편번호
+    newRow[11] = coupangRow[coupangMapping.address] || ''; // L: 받는분총주소
+    newRow[12] = coupangRow[coupangMapping.quantity] || 0; // M: 수량
+    newRow[13] = convertedProductName; // N: 품목명
+    
+    return newRow;
+  },
+  
+  /**
+   * 쿠팡 파일을 날짜 폴더로 이동
+   */
+  moveCoupangFileToFolder: function(fileId, dateString) {
+    try {
+      const file = DriveApp.getFileById(fileId);
+      const parentFolderId = CONFIG.FOLDER_ID;
+      const parentFolder = DriveApp.getFolderById(parentFolderId);
+      
+      // 날짜 폴더 찾기 또는 생성
+      const folders = parentFolder.getFoldersByName(dateString);
+      let dateFolder;
+      
+      if (folders.hasNext()) {
+        dateFolder = folders.next();
+      } else {
+        dateFolder = parentFolder.createFolder(dateString);
+      }
+      
+      // 파일 이동
+      dateFolder.addFile(file);
+      DriveApp.getRootFolder().removeFile(file);
+      
+    } catch (error) {
+      console.error('쿠팡 파일 이동 실패:', error);
+    }
+  }
+};
