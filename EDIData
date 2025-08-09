@@ -1,0 +1,280 @@
+/**
+ * EDI 데이터 처리
+ * EDIData.gs
+ */
+
+const EDIData = {
+  /**
+   * EDI 데이터 업데이트
+   */
+  updateEDIData: function() {
+    try {
+      const today = new Date();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      const searchDate = month + day; // MMDD 형식
+      
+      return this.getEDIFromEmail(searchDate);
+      
+    } catch (error) {
+      return {
+        success: false,
+        error: error.toString()
+      };
+    }
+  },
+  
+  /**
+   * Gmail에서 EDI 데이터 가져오기
+   */
+  getEDIFromEmail: function(dateString) {
+    try {
+      // 설정 초기화
+      if (typeof initializeConfig === 'function') {
+        initializeConfig();
+      }
+      
+      // 날짜 형식 처리
+      let targetDate = dateString;
+      let fullDate = '';
+      
+      if (dateString.length === 4) {
+        // MMDD 형식
+        targetDate = dateString;
+        const year = new Date().getFullYear();
+        fullDate = year + dateString;
+      } else if (dateString.length === 8) {
+        // YYYYMMDD 형식
+        targetDate = dateString.substring(4); // MMDD 추출
+        fullDate = dateString;
+      } else {
+        // 기본값: 오늘 날짜
+        targetDate = getTodayShortDate();
+        fullDate = getTodayDate();
+      }
+      
+      // 이메일 검색
+      const senders = ['brdmc@naver.com', 'suhyang@kas.co.kr'];
+      let threads = [];
+      
+      // 각 발신자별로 검색
+      for (const sender of senders) {
+        const query = `from:${sender} subject:"${targetDate}" has:attachment`;
+        const searchResults = GmailApp.search(query, 0, 10);
+        threads = threads.concat(searchResults);
+      }
+      
+      if (threads.length === 0) {
+        // 더 넓은 범위로 재검색 (시간 범위 포함 - 오늘 날짜인 경우만)
+        if (targetDate === getTodayShortDate()) {
+          const todayStart = new Date();
+          todayStart.setHours(13, 0, 0, 0); // 오후 1시
+          const todayEnd = new Date();
+          todayEnd.setHours(15, 30, 0, 0); // 오후 3시 30분
+          
+          const query = `(from:brdmc@naver.com OR from:suhyang@kas.co.kr) has:attachment after:${Math.floor(todayStart.getTime()/1000)} before:${Math.floor(todayEnd.getTime()/1000)}`;
+          threads = GmailApp.search(query, 0, 10);
+        }
+      }
+      
+      if (threads.length === 0) {
+        return {
+          success: false,
+          error: `${targetDate} 날짜의 EDI 이메일을 찾을 수 없습니다.`
+        };
+      }
+      
+      // 첨부파일 처리
+      for (const thread of threads) {
+        const messages = thread.getMessages();
+        for (const message of messages) {
+          const attachments = message.getAttachments();
+          
+          for (const attachment of attachments) {
+            const fileName = attachment.getName();
+            
+            // 엑셀 파일 확인
+            if (fileName.includes('운송장') && 
+                (fileName.endsWith('.xlsx') || fileName.endsWith('.xls'))) {
+              
+              // 엑셀 파일을 Google Sheets로 변환
+              return this.convertExcelToSheets(attachment, fullDate);
+            }
+          }
+        }
+      }
+      
+      return {
+        success: false,
+        error: 'EDI 엑셀 파일을 찾을 수 없습니다.'
+      };
+      
+    } catch (error) {
+      return {
+        success: false,
+        error: error.toString()
+      };
+    }
+  },
+  
+  /**
+   * Excel 파일을 Google Sheets로 변환
+   */
+  convertExcelToSheets: function(attachment, fullDate) {
+    try {
+      const blob = attachment.getAs('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      
+      // fullDate가 없으면 오늘 날짜 사용
+      if (!fullDate) {
+        fullDate = getTodayDate();
+      }
+      
+      const fileName = fullDate + '_간편식_EDI';
+      
+      // 임시로 Drive에 저장
+      const tempFile = DriveApp.createFile(blob);
+      tempFile.setName('temp_' + fileName);
+      
+      // Google Sheets로 변환
+      const resource = {
+        title: fileName,
+        mimeType: MimeType.GOOGLE_SHEETS,
+        parents: [{id: CONFIG.FOLDER_ID}]
+      };
+      
+      const fileId = tempFile.getId();
+      const convertedFile = Drive.Files.copy(resource, fileId);
+      
+      // 임시 파일 삭제
+      DriveApp.getFileById(fileId).setTrashed(true);
+      
+      // 변환된 스프레드시트 열기
+      const spreadsheet = SpreadsheetApp.openById(convertedFile.id);
+      const sourceSheet = spreadsheet.getSheetByName('empty') || spreadsheet.getSheets()[0];
+      
+      // 현재 스프레드시트에 복사
+      const currentSpreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+      let targetSheet = currentSpreadsheet.getSheetByName(fileName);
+      
+      if (targetSheet) {
+        currentSpreadsheet.deleteSheet(targetSheet);
+      }
+      
+      targetSheet = currentSpreadsheet.insertSheet(fileName);
+      const data = sourceSheet.getDataRange().getValues();
+      
+      if (data.length > 0) {
+        targetSheet.getRange(1, 1, data.length, data[0].length).setValues(data);
+      }
+      
+      // 드라이브 폴더 정리
+      this.moveToDateFolder(convertedFile.id, fullDate);
+      
+      return {
+        success: true,
+        sheetName: fileName,
+        rowCount: data.length,
+        date: fullDate
+      };
+      
+    } catch (error) {
+      return {
+        success: false,
+        error: 'Excel 변환 실패: ' + error.toString()
+      };
+    }
+  },
+  
+  /**
+   * 파일을 날짜 폴더로 이동
+   */
+  moveToDateFolder: function(fileId, dateString) {
+    try {
+      const file = DriveApp.getFileById(fileId);
+      const parentFolderId = CONFIG.FOLDER_ID;
+      const parentFolder = DriveApp.getFolderById(parentFolderId);
+      
+      // 날짜 폴더 생성 또는 가져오기
+      const folders = parentFolder.getFoldersByName(dateString);
+      let dateFolder;
+      
+      if (folders.hasNext()) {
+        dateFolder = folders.next();
+      } else {
+        dateFolder = parentFolder.createFolder(dateString);
+      }
+      
+      // 파일 이동
+      dateFolder.addFile(file);
+      
+      // 원래 위치에서 제거
+      const parents = file.getParents();
+      while (parents.hasNext()) {
+        const parent = parents.next();
+        if (parent.getId() !== dateFolder.getId()) {
+          parent.removeFile(file);
+        }
+      }
+      
+    } catch (error) {
+      console.error('파일 이동 실패:', error);
+    }
+  },
+  
+  /**
+   * B시트 데이터 가져오기 (데이터 처리용)
+   */
+  getSheetBData: function() {
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    
+    // 가능한 시트 이름들 찾기 (날짜 지정 또는 오늘 날짜)
+    const sheets = spreadsheet.getSheets();
+    let bSheet = null;
+    
+    // _간편식_EDI로 끝나는 가장 최근 시트 찾기
+    for (const sheet of sheets) {
+      const name = sheet.getName();
+      if (name.includes('_간편식_EDI') && !name.startsWith('TEST_') && !name.startsWith('샘플_')) {
+        bSheet = sheet;
+        break;
+      }
+    }
+    
+    if (!bSheet) {
+      // 오늘 날짜 시트 시도
+      const todayFull = getTodayDate();
+      const sheetName = todayFull + '_간편식_EDI';
+      bSheet = spreadsheet.getSheetByName(sheetName);
+    }
+    
+    if (!bSheet) {
+      throw new Error('B시트를 찾을 수 없습니다. 먼저 EDI 데이터를 업데이트하세요.');
+    }
+    
+    return bSheet.getDataRange().getValues();
+  },
+  
+  /**
+   * B시트 열 인덱스 매핑
+   */
+  getSheetBColumnMapping: function(headers) {
+    const mapping = {};
+    
+    // 헤더에서 열 찾기
+    headers.forEach((header, index) => {
+      const cleanHeader = header.toString().toLowerCase().replace(/\s/g, '');
+      
+      if (cleanHeader.includes('주문번호') || cleanHeader.includes('orderno')) {
+        mapping['주문번호'] = index;
+      }
+      if (cleanHeader.includes('상품명') || cleanHeader.includes('product')) {
+        mapping['상품명'] = index;
+      }
+      if (cleanHeader.includes('수량') || cleanHeader.includes('qty') || cleanHeader.includes('quantity')) {
+        mapping['수량'] = index;
+      }
+    });
+    
+    return mapping;
+  }
+};
