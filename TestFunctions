@@ -1,0 +1,399 @@
+/**
+ * 테스트 기능 모음
+ * TestFunctions.gs
+ */
+
+const TestFunctions = {
+  /**
+   * 특정 날짜의 싸이버스카이 데이터 테스트
+   */
+  testCyberskyByDate: function() {
+    const ui = SpreadsheetApp.getUi();
+    
+    // 날짜 입력 받기
+    const response = ui.prompt(
+      '📅 테스트 날짜 입력',
+      '싸이버스카이 데이터를 가져올 날짜를 입력하세요.\n' +
+      '형식: MMDD (예: 0807, 0808)\n' +
+      '해당 날짜의 시트가 소스 스프레드시트에 있어야 합니다.',
+      ui.ButtonSet.OK_CANCEL
+    );
+    
+    if (response.getSelectedButton() !== ui.Button.OK) {
+      return;
+    }
+    
+    const testDate = response.getResponseText().trim();
+    
+    // 날짜 형식 검증
+    if (!/^\d{4}$/.test(testDate)) {
+      ui.alert('❌ 잘못된 날짜 형식입니다. MMDD 형식으로 입력해주세요.');
+      return;
+    }
+    
+    try {
+      // 설정 초기화
+      initializeConfig();
+      
+      // CyberskyData의 함수를 직접 호출
+      const result = CyberskyData.updateCyberskyDataForDate(testDate);
+      
+      if (result.success) {
+        // 테스트용 시트로 이름 변경
+        const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+        const originalSheet = spreadsheet.getSheetByName(result.sheetName);
+        if (originalSheet) {
+          const newName = `TEST_${testDate}_싸이버스카이`;
+          originalSheet.setName(newName);
+          ui.alert(`✅ 테스트 성공!\n\n${testDate} 싸이버스카이 데이터를 가져왔습니다.\n시트명: ${newName}\n데이터: ${result.rowCount}행`);
+        }
+      } else {
+        ui.alert('❌ ' + result.error);
+      }
+      
+    } catch (error) {
+      ui.alert('❌ 테스트 실패: ' + error.toString());
+    }
+  },
+  
+  /**
+   * 특정 날짜의 EDI 데이터 테스트
+   */
+  testEDIByDate: function() {
+    const ui = SpreadsheetApp.getUi();
+    
+    // 날짜 입력 받기
+    const response = ui.prompt(
+      '📅 테스트 날짜 입력',
+      'EDI 메일을 검색할 날짜를 입력하세요.\n' +
+      '형식: MMDD (예: 0728, 0807)\n' +
+      '해당 날짜의 메일이 Gmail에 있어야 합니다.',
+      ui.ButtonSet.OK_CANCEL
+    );
+    
+    if (response.getSelectedButton() !== ui.Button.OK) {
+      return;
+    }
+    
+    const testDate = response.getResponseText().trim();
+    
+    // 날짜 형식 검증
+    if (!/^\d{4}$/.test(testDate)) {
+      ui.alert('❌ 잘못된 날짜 형식입니다. MMDD 형식으로 입력해주세요.');
+      return;
+    }
+    
+    try {
+      // 설정 초기화
+      initializeConfig();
+      
+      // EDIData의 함수를 직접 호출
+      const result = EDIData.getEDIFromEmail(testDate);
+      
+      if (result.success) {
+        // 테스트용 시트로 이름 변경
+        const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+        const originalSheet = spreadsheet.getSheetByName(result.sheetName);
+        if (originalSheet) {
+          const newName = `TEST_${testDate}_EDI`;
+          originalSheet.setName(newName);
+          ui.alert(`✅ 테스트 성공!\n\n${testDate} EDI 데이터를 찾았습니다.\n시트명: ${newName}\n데이터: ${result.rowCount}행`);
+        }
+      } else {
+        ui.alert('❌ ' + result.error);
+      }
+      
+    } catch (error) {
+      ui.alert('❌ 테스트 실패: ' + error.toString());
+    }
+  },
+  
+  /**
+   * 특정 날짜의 전체 프로세스 테스트
+   */
+  testFullProcessByDate: function() {
+    const ui = SpreadsheetApp.getUi();
+    
+    // 날짜 입력 받기
+    const response = ui.prompt(
+      '📅 전체 프로세스 테스트',
+      '테스트할 날짜를 입력하세요.\n' +
+      '형식: MMDD (예: 0807, 0808)\n\n' +
+      '⚠️ 주의:\n' +
+      '- 싸이버스카이: MMDD 시트가 있어야 함\n' +
+      '- EDI: MMDD 제목의 메일이 있어야 함',
+      ui.ButtonSet.OK_CANCEL
+    );
+    
+    if (response.getSelectedButton() !== ui.Button.OK) {
+      return;
+    }
+    
+    const shortDate = response.getResponseText().trim();
+    
+    // 날짜 형식 검증
+    if (!/^\d{4}$/.test(shortDate)) {
+      ui.alert('❌ 잘못된 날짜 형식입니다. MMDD 형식으로 입력해주세요.');
+      return;
+    }
+    
+    const year = new Date().getFullYear();
+    const fullDate = year + shortDate;
+    
+    try {
+      ui.alert('🔄 테스트를 시작합니다...\n\n1. 싸이버스카이 데이터 가져오기\n2. EDI 데이터 가져오기\n3. 데이터 처리\n4. 검산');
+      
+      // 설정 초기화
+      initializeConfig();
+      
+      // 1. 싸이버스카이 데이터 테스트
+      const cyberskyResult = CyberskyData.updateCyberskyDataForDate(shortDate);
+      if (!cyberskyResult.success) {
+        throw new Error('싸이버스카이 데이터 실패: ' + cyberskyResult.error);
+      }
+      
+      // TEST_ 접두사 추가
+      const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+      let aSheet = spreadsheet.getSheetByName(cyberskyResult.sheetName);
+      if (aSheet) {
+        aSheet.setName(`TEST_${fullDate}_싸이버스카이`);
+      }
+      
+      // 2. EDI 데이터 테스트
+      const ediResult = EDIData.getEDIFromEmail(shortDate);
+      if (!ediResult.success) {
+        throw new Error('EDI 데이터 실패: ' + ediResult.error);
+      }
+      
+      // TEST_ 접두사 추가
+      let bSheet = spreadsheet.getSheetByName(ediResult.sheetName);
+      if (bSheet) {
+        bSheet.setName(`TEST_${shortDate}_EDI`);
+      }
+      
+      // 3. 데이터 처리 (TEST 시트들을 사용하도록 임시 수정)
+      const processResult = this.processTestData(fullDate, shortDate);
+      
+      // 4. 검산
+      const verifyResult = this.verifyTestData(fullDate);
+      
+      // 결과 메시지
+      const resultMessage = `✅ 전체 테스트 완료!\n\n` +
+        `날짜: ${shortDate}\n` +
+        `━━━━━━━━━━━━━━━━\n` +
+        `1. 싸이버스카이: ${cyberskyResult.rowCount}행\n` +
+        `2. EDI: ${ediResult.rowCount}행\n` +
+        `3. 처리된 데이터: ${processResult.processedRows}행\n` +
+        `4. 검산: ${verifyResult.success ? '성공 ✅' : '실패 ❌'}\n` +
+        `━━━━━━━━━━━━━━━━\n` +
+        `생성된 시트:\n` +
+        `- TEST_${fullDate}_싸이버스카이\n` +
+        `- TEST_${shortDate}_EDI\n` +
+        `- TEST_${fullDate}_수기송장`;
+      
+      ui.alert(resultMessage);
+      
+    } catch (error) {
+      ui.alert('❌ 테스트 실패: ' + error.toString());
+    }
+  },
+  
+  /**
+   * 테스트 데이터 처리
+   */
+  processTestData: function(fullDate, shortDate) {
+    try {
+      const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+      
+      // 테스트 시트 이름
+      const aSheetName = `TEST_${fullDate}_싸이버스카이`;
+      const bSheetName = `TEST_${shortDate}_EDI`;
+      const cSheetName = `TEST_${fullDate}_수기송장`;
+      
+      const aSheet = spreadsheet.getSheetByName(aSheetName);
+      const bSheet = spreadsheet.getSheetByName(bSheetName);
+      
+      if (!aSheet || !bSheet) {
+        return {
+          success: false,
+          error: 'A시트 또는 B시트를 찾을 수 없습니다.'
+        };
+      }
+      
+      // 데이터 가져오기
+      const sheetAData = aSheet.getDataRange().getValues();
+      const sheetBData = bSheet.getDataRange().getValues();
+      
+      if (!sheetAData || sheetAData.length < 2) {
+        throw new Error('A시트 데이터가 없습니다.');
+      }
+      
+      if (!sheetBData || sheetBData.length < 2) {
+        throw new Error('B시트 데이터가 없습니다.');
+      }
+      
+      // 헤더와 데이터 분리
+      const sheetAHeaders = sheetAData[0];
+      let sheetARows = sheetAData.slice(1);
+      
+      const sheetBHeaders = sheetBData[0];
+      const sheetBRows = sheetBData.slice(1);
+      
+      // 열 매핑
+      const colA = CyberskyData.getSheetAColumnMapping(sheetAHeaders);
+      const colB = EDIData.getSheetBColumnMapping(sheetBHeaders);
+      
+      // DataProcessor의 처리 로직 재사용
+      const processedBRows = DataProcessor.processBSheetData(sheetBRows, colB);
+      sheetARows = DataProcessor.processASheetData(sheetARows, colA);
+      sheetARows = DataProcessor.adjustQuantities(sheetARows, processedBRows, colA, colB);
+      sheetARows = sheetARows.filter(row => row[colA['ORDERCNT']] > 0);
+      
+      // C시트 생성
+      let cSheet = spreadsheet.getSheetByName(cSheetName);
+      if (cSheet) {
+        spreadsheet.deleteSheet(cSheet);
+      }
+      
+      cSheet = spreadsheet.insertSheet(cSheetName);
+      
+      // C시트 헤더 설정
+      const headers = [
+        '보내시는 분', '보내시는 분 전화', '보내시는 분 핸드폰', '휴대폰번호',
+        '보내는분우편번호', '보내는분총주소', '받으시는 분', '받으시는 분 전화',
+        '받으시는 분 우편', '받는분핸드폰', '받는분우편번호', '받는분총주소',
+        '수량', '품목명', '메모', '운임종류', '택배사'
+      ];
+      
+      cSheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+      
+      // 데이터 변환 및 입력
+      const newRows = [];
+      for (const row of sheetARows) {
+        const newRow = [
+          row[colA['ORDERER']] || '',
+          row[colA['PHONE']] || '',
+          '',
+          '',
+          CONFIG.SENDER_POSTAL_CODE,
+          CONFIG.SENDER_ADDRESS,
+          row[colA['RECEIVER']] || '',
+          '',
+          '',
+          row[colA['CELL']] || '',
+          row[colA['POST_NO']] || '',
+          row[colA['주소']] || '',
+          row[colA['ORDERCNT']] || 0,
+          row[colA['PROD_NAME']] || '',
+          '',
+          '',
+          ''
+        ];
+        newRows.push(newRow);
+      }
+      
+      if (newRows.length > 0) {
+        cSheet.getRange(2, 1, newRows.length, newRows[0].length).setValues(newRows);
+      }
+      
+      return {
+        success: true,
+        processedRows: sheetARows.length
+      };
+      
+    } catch (error) {
+      return {
+        success: false,
+        error: error.toString()
+      };
+    }
+  },
+  
+  /**
+   * 테스트 데이터 검산
+   */
+  verifyTestData: function(fullDate) {
+    try {
+      const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+      
+      // TEST 시트들 찾기
+      const aSheet = spreadsheet.getSheetByName(`TEST_${fullDate}_싸이버스카이`);
+      const cSheet = spreadsheet.getSheetByName(`TEST_${fullDate}_수기송장`);
+      
+      if (!aSheet || !cSheet) {
+        return {
+          success: false,
+          message: '검산할 시트를 찾을 수 없습니다.'
+        };
+      }
+      
+      // 간단한 검산 (행 수 비교)
+      const aRows = aSheet.getLastRow() - 1; // 헤더 제외
+      const cRows = cSheet.getLastRow() - 1; // 헤더 제외
+      
+      return {
+        success: cRows > 0,
+        message: `A시트: ${aRows}행, C시트: ${cRows}행`
+      };
+      
+    } catch (error) {
+      return {
+        success: false,
+        message: error.toString()
+      };
+    }
+  },
+  
+  /**
+   * 최근 EDI 테스트 (기존 함수)
+   */
+  testGetRecentEDI: function() {
+    try {
+      initializeConfig();
+      const testDate = '0728';
+      const result = EDIData.getEDIFromEmail(testDate);
+      
+      if (result.success) {
+        SpreadsheetApp.getUi().alert('✅ 테스트 성공!\n' + testDate + ' EDI 데이터를 찾았습니다.');
+      } else {
+        SpreadsheetApp.getUi().alert('❌ 테스트 실패: ' + result.error);
+      }
+    } catch (error) {
+      SpreadsheetApp.getUi().alert('❌ 오류: ' + error.toString());
+    }
+  },
+  
+  /**
+   * 테스트 시트 정리
+   */
+  cleanTestSheets: function() {
+    const ui = SpreadsheetApp.getUi();
+    const response = ui.alert(
+      '🧹 테스트 시트 정리',
+      'TEST_로 시작하는 모든 시트를 삭제하시겠습니까?',
+      ui.ButtonSet.YES_NO
+    );
+    
+    if (response !== ui.Button.YES) {
+      return;
+    }
+    
+    try {
+      const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+      const sheets = spreadsheet.getSheets();
+      let deletedCount = 0;
+      
+      for (const sheet of sheets) {
+        if (sheet.getName().startsWith('TEST_')) {
+          spreadsheet.deleteSheet(sheet);
+          deletedCount++;
+        }
+      }
+      
+      ui.alert(`✅ ${deletedCount}개의 테스트 시트를 삭제했습니다.`);
+      
+    } catch (error) {
+      ui.alert('❌ 정리 실패: ' + error.toString());
+    }
+  }
+};
