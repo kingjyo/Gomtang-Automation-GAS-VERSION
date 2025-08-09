@@ -1,0 +1,248 @@
+<script>
+  // ===== 상태 =====
+  let oauthToken = '';
+  let developerKey = '';
+  let appId = ''; // 선택
+  let selectedSpreadsheet = null;
+  let selectedFolder = null;
+  let isReady = false;
+
+  // ===== 유틸 =====
+  const qs = (id) => document.getElementById(id);
+  const disablePickButtons = (disabled) =>
+    document.querySelectorAll('.btn.pick').forEach(b => b.disabled = disabled);
+
+  function showContent() {
+    qs('loading').classList.remove('show');
+    qs('content').style.display = 'block';
+  }
+
+  function ensureReadyOrWarn() {
+    if (!isReady || !oauthToken || !developerKey) {
+      alert('아직 준비 중입니다. 잠시 후 다시 시도해주세요.');
+      return false;
+    }
+    return true;
+  }
+
+  function getSpreadsheetMimeFilter() {
+    const onlySheets = qs('filterSheetsOnly')?.checked;
+    return onlySheets ? 'application/vnd.google-apps.spreadsheet' : '';
+  }
+
+  // ===== 화면 표시 =====
+  function updateDisplay(settings) {
+    const ssDiv = qs('selectedSpreadsheet');
+    const fdDiv = qs('selectedFolder');
+
+    if (settings.sourceSpreadsheetId) {
+      selectedSpreadsheet = {
+        id: settings.sourceSpreadsheetId,
+        name: settings.sourceSpreadsheetName || settings.sourceSpreadsheetId
+      };
+      ssDiv.textContent = selectedSpreadsheet.name;
+      ssDiv.classList.remove('empty');
+    } else {
+      selectedSpreadsheet = null;
+      ssDiv.textContent = '선택된 파일이 없습니다';
+      ssDiv.classList.add('empty');
+    }
+
+    if (settings.folderId) {
+      selectedFolder = {
+        id: settings.folderId,
+        name: settings.folderName || settings.folderId
+      };
+      fdDiv.textContent = selectedFolder.name;
+      fdDiv.classList.remove('empty');
+    } else {
+      selectedFolder = null;
+      fdDiv.textContent = '선택된 폴더가 없습니다';
+      fdDiv.classList.add('empty');
+    }
+
+    updateSaveButton();
+  }
+
+  function updateSaveButton() {
+    qs('saveBtn').disabled = !(selectedSpreadsheet && selectedFolder);
+  }
+
+  // ===== 이름 보강(권한 필요, 실패해도 무시) =====
+  function hydrateNames() {
+    google.script.run
+      .withSuccessHandler(function (res) {
+        if (res?.success) updateDisplay(res.settings);
+      })
+      .withFailureHandler(function (err) {
+        console.warn('이름 보강 실패(무시):', err);
+      })
+      .getCurrentPickerSettings();
+  }
+
+  // ===== 스프레드시트 선택 =====
+  function pickSpreadsheet() {
+    if (!ensureReadyOrWarn()) return;
+
+    const mime = getSpreadsheetMimeFilter();
+
+    // 탭1: 내 드라이브(내 소유)
+    const mySheets = new google.picker.DocsView(google.picker.ViewId.SPREADSHEETS)
+      .setOwnedByMe(true)
+      .setMode(google.picker.DocsViewMode.LIST);
+    if (mime) mySheets.setMimeTypes(mime);
+
+    // 탭2: 공유 드라이브 포함(전체)
+    const sharedSheets = new google.picker.DocsView(google.picker.ViewId.SPREADSHEETS)
+      .setMode(google.picker.DocsViewMode.LIST);
+    if (mime) sharedSheets.setMimeTypes(mime);
+
+    const builder = new google.picker.PickerBuilder()
+      .addView(mySheets)
+      .addView(sharedSheets)
+      .setLocale('ko')
+      .setSize(1051, 650)                             // Picker 최대 크기
+      .enableFeature(google.picker.Feature.SUPPORT_DRIVES)
+      .setOAuthToken(oauthToken)
+      .setDeveloperKey(developerKey)
+      .setOrigin(google.script.host.origin);
+
+    if (mime) builder.setSelectableMimeTypes(mime);
+    if (appId) builder.setAppId(appId);
+
+    builder.setCallback(function (data) {
+      if (data[google.picker.Response.ACTION] === google.picker.Action.PICKED) {
+        const file = data[google.picker.Response.DOCUMENTS][0];
+        selectedSpreadsheet = { id: file[google.picker.Document.ID], name: file[google.picker.Document.NAME] };
+        qs('selectedSpreadsheet').textContent = selectedSpreadsheet.name;
+        qs('selectedSpreadsheet').classList.remove('empty');
+        updateSaveButton();
+      }
+    }).build().setVisible(true);
+  }
+
+  // ===== 폴더 선택 =====
+  function pickFolder() {
+    if (!ensureReadyOrWarn()) return;
+
+    const myFolders = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
+      .setOwnedByMe(true)
+      .setIncludeFolders(true)
+      .setSelectFolderEnabled(true)
+      .setMode(google.picker.DocsViewMode.LIST);
+
+    const sharedFolders = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
+      .setIncludeFolders(true)
+      .setSelectFolderEnabled(true)
+      .setMode(google.picker.DocsViewMode.LIST);
+
+    const builder = new google.picker.PickerBuilder()
+      .addView(myFolders)
+      .addView(sharedFolders)
+      .setLocale('ko')
+      .setSize(1051, 650)
+      .enableFeature(google.picker.Feature.SUPPORT_DRIVES)
+      .setOAuthToken(oauthToken)
+      .setDeveloperKey(developerKey)
+      .setOrigin(google.script.host.origin);
+
+    if (appId) builder.setAppId(appId);
+
+    builder.setCallback(function (data) {
+      if (data[google.picker.Response.ACTION] === google.picker.Action.PICKED) {
+        const file = data[google.picker.Response.DOCUMENTS][0];
+        selectedFolder = { id: file[google.picker.Document.ID], name: file[google.picker.Document.NAME] };
+        qs('selectedFolder').textContent = selectedFolder.name;
+        qs('selectedFolder').classList.remove('empty');
+        updateSaveButton();
+      }
+    }).build().setVisible(true);
+  }
+
+  // ===== 저장 =====
+  function saveSettings() {
+    if (!selectedSpreadsheet || !selectedFolder) {
+      alert('스프레드시트와 폴더를 모두 선택해주세요.');
+      return;
+    }
+    const selection = { spreadsheetId: selectedSpreadsheet.id, folderId: selectedFolder.id };
+
+    google.script.run
+      .withSuccessHandler(function (res) {
+        if (res && res.success) {
+          alert('✅ 설정이 저장되었습니다!');
+          google.script.host.close();
+        } else {
+          alert('❌ 저장 실패: ' + (res && res.error ? res.error : '알 수 없는 오류'));
+        }
+      })
+      .withFailureHandler(function (err) {
+        console.error(err);
+        alert('❌ 저장 중 오류가 발생했습니다.');
+      })
+      .savePickerSelection(selection);
+  }
+
+  // ===== 부팅 =====
+  function boot() {
+    qs('loading').classList.add('show');
+    disablePickButtons(true);
+
+    // gapi 로드 타임아웃(8초)
+    const gapiTimer = setTimeout(() => {
+      showContent();
+      alert('Google API 로드가 지연됩니다. 네트워크/차단(apis.google.com) 확인 후 다시 시도하세요.');
+    }, 8000);
+
+    gapi.load('picker', {
+      callback: function () {
+        clearTimeout(gapiTimer);
+
+        // 서버 핑(네트워크/세션 확인)
+        google.script.run
+          .withSuccessHandler(function () {
+            // 토큰 → API키 → AppId → Lite 설정 → 이름 보강
+            google.script.run.withSuccessHandler(function (token) {
+              oauthToken = token || '';
+
+              google.script.run.withSuccessHandler(function (key) {
+                developerKey = key || '';
+
+                google.script.run.withSuccessHandler(function (id) {
+                  appId = id || '';
+
+                  google.script.run
+                    .withSuccessHandler(function (res) {
+                      showContent();
+                      if (res?.success) updateDisplay(res.settings);
+                      isReady = !!(oauthToken && developerKey);
+                      disablePickButtons(!isReady);
+                      hydrateNames(); // 실패해도 무시
+                    })
+                    .withFailureHandler(function (err) {
+                      showContent();
+                      alert('설정을 불러오는 중 오류가 발생했습니다.');
+                      console.error(err);
+                    })
+                    .getCurrentPickerSettingsLite();
+
+                }).getPickerAppId();
+
+              }).getPickerApiKey();
+
+            }).getOAuthToken();
+
+          })
+          .withFailureHandler(function (err) {
+            showContent();
+            alert('서버 연결에 실패했습니다. 네트워크 상태를 확인하세요.');
+            console.error(err);
+          })
+          .pingServer();
+      }
+    });
+  }
+
+  // 안전: onload 등록
+  window.addEventListener('load', boot);
+</script>
