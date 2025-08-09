@@ -1,0 +1,267 @@
+/**
+ * 검산 기능
+ * Verification.gs
+ */
+
+const Verification = {
+  /**
+   * 검산 실행
+   */
+  runVerification: function() {
+    try {
+      const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+      
+      // 날짜 추출
+      let datePrefix = getTodayDate();
+      const sheets = spreadsheet.getSheets();
+      
+      for (const sheet of sheets) {
+        const name = sheet.getName();
+        if (name.includes('_간편식_싸이버스카이') && !name.startsWith('TEST_')) {
+          datePrefix = name.split('_')[0];
+          break;
+        }
+      }
+      
+      // 시트 가져오기
+      const sheetAName = datePrefix + '_간편식_싸이버스카이';
+      const sheetBName = datePrefix + '_간편식_EDI';
+      const sheetCName = datePrefix + ' 간편식 수기송장';
+      
+      const sheetA = spreadsheet.getSheetByName(sheetAName);
+      const sheetB = spreadsheet.getSheetByName(sheetBName);
+      const sheetC = spreadsheet.getSheetByName(sheetCName);
+      
+      if (!sheetA || !sheetB || !sheetC) {
+        return {
+          success: false,
+          message: '필요한 시트를 찾을 수 없습니다.\n' +
+                   `A시트: ${sheetA ? '있음' : '없음'}\n` +
+                   `B시트: ${sheetB ? '있음' : '없음'}\n` +
+                   `C시트: ${sheetC ? '있음' : '없음'}`
+        };
+      }
+      
+      // 데이터 가져오기
+      const dataA = sheetA.getDataRange().getValues();
+      const dataB = sheetB.getDataRange().getValues();
+      const dataC = sheetC.getDataRange().getValues();
+      
+      // 헤더 찾기
+      const colA = this.findColumns(dataA[0], ['PROD_NAME', 'ORDERCNT']);
+      const colB = this.findColumns(dataB[0], ['상품명', '수량']);
+      const colC = this.findColumns(dataC[0], ['품목명', '수량']);
+      
+      // B시트 상품명 정제
+      const processedDataB = this.processProductNames(dataB.slice(1), colB['상품명']);
+      
+      // 상품별 수량 집계
+      const productTotals = this.calculateProductTotals(
+        dataA.slice(1), colA,
+        processedDataB, colB,
+        dataC.slice(1), colC
+      );
+      
+      // 검산 결과 생성
+      const result = this.generateVerificationResult(productTotals);
+      
+      // 결과를 새 시트에 저장
+      this.saveVerificationResult(result.details, datePrefix);
+      
+      return result;
+      
+    } catch (error) {
+      return {
+        success: false,
+        message: '검산 중 오류 발생: ' + error.toString()
+      };
+    }
+  },
+  
+  /**
+   * 열 인덱스 찾기
+   */
+  findColumns: function(headers, targetColumns) {
+    const mapping = {};
+    
+    for (const target of targetColumns) {
+      for (let i = 0; i < headers.length; i++) {
+        const header = String(headers[i]).toLowerCase().replace(/\s/g, '');
+        const targetLower = target.toLowerCase().replace(/\s/g, '');
+        
+        if (header.includes(targetLower)) {
+          mapping[target] = i;
+          break;
+        }
+      }
+    }
+    
+    return mapping;
+  },
+  
+  /**
+   * B시트 상품명 정제
+   */
+  processProductNames: function(rows, prodColIndex) {
+    const processedRows = [];
+    
+    for (const row of rows) {
+      const processedRow = [...row];
+      if (prodColIndex !== undefined) {
+        const productName = String(processedRow[prodColIndex] || '');
+        processedRow[prodColIndex] = productName.split('|')[0].trim();
+      }
+      processedRows.push(processedRow);
+    }
+    
+    return processedRows;
+  },
+  
+  /**
+   * 상품별 수량 집계
+   */
+  calculateProductTotals: function(dataA, colA, dataB, colB, dataC, colC) {
+    const totals = {};
+    
+    // A시트 집계
+    for (const row of dataA) {
+      const prodName = String(row[colA['PROD_NAME']] || '').trim();
+      const qty = Number(row[colA['ORDERCNT']] || 0);
+      
+      if (prodName) {
+        if (!totals[prodName]) {
+          totals[prodName] = { a: 0, b: 0, c: 0 };
+        }
+        totals[prodName].a += qty;
+      }
+    }
+    
+    // B시트 집계
+    for (const row of dataB) {
+      const prodName = String(row[colB['상품명']] || '').trim();
+      const qty = Number(row[colB['수량']] || 0);
+      
+      if (prodName) {
+        if (!totals[prodName]) {
+          totals[prodName] = { a: 0, b: 0, c: 0 };
+        }
+        totals[prodName].b += qty;
+      }
+    }
+    
+    // C시트 집계
+    for (const row of dataC) {
+      const prodName = String(row[colC['품목명']] || '').trim();
+      const qty = Number(row[colC['수량']] || 0);
+      
+      if (prodName) {
+        if (!totals[prodName]) {
+          totals[prodName] = { a: 0, b: 0, c: 0 };
+        }
+        totals[prodName].c += qty;
+      }
+    }
+    
+    return totals;
+  },
+  
+  /**
+   * 검산 결과 생성
+   */
+  generateVerificationResult: function(productTotals) {
+    const details = [];
+    let allSuccess = true;
+    
+    const sortedProducts = Object.keys(productTotals).sort();
+    
+    for (const product of sortedProducts) {
+      const totals = productTotals[product];
+      const calculated = totals.b + totals.c;
+      const isMatch = calculated === totals.a;
+      
+      if (!isMatch) {
+        allSuccess = false;
+      }
+      
+      details.push({
+        product: product,
+        b: totals.b,
+        c: totals.c,
+        calculated: calculated,
+        a: totals.a,
+        isMatch: isMatch,
+        status: isMatch ? '✅' : '❌'
+      });
+    }
+    
+    // 결과 메시지 생성
+    let message = '=== 검산 결과 ===\n\n';
+    
+    for (const detail of details) {
+      message += `${detail.status} ${detail.product}\n`;
+      message += `   B시트: ${detail.b} + C시트: ${detail.c} = ${detail.calculated}\n`;
+      message += `   A시트: ${detail.a}\n`;
+      if (!detail.isMatch) {
+        message += `   차이: ${detail.a - detail.calculated}\n`;
+      }
+      message += '\n';
+    }
+    
+    message += '\n' + (allSuccess ? '✅ 검산 성공!' : '❌ 검산 실패!');
+    
+    return {
+      success: allSuccess,
+      message: message,
+      details: details
+    };
+  },
+  
+  /**
+   * 검산 결과 저장
+   */
+  saveVerificationResult: function(details, datePrefix) {
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    
+    if (!datePrefix) {
+      datePrefix = getTodayDate();
+    }
+    
+    const sheetName = datePrefix + '_검산결과';
+    
+    // 기존 시트 삭제
+    let sheet = spreadsheet.getSheetByName(sheetName);
+    if (sheet) {
+      spreadsheet.deleteSheet(sheet);
+    }
+    
+    // 새 시트 생성
+    sheet = spreadsheet.insertSheet(sheetName);
+    
+    // 헤더 설정
+    const headers = ['상태', '품목명', 'B시트', 'C시트', '합계', 'A시트', '차이'];
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    
+    // 데이터 입력
+    const rows = details.map(detail => [
+      detail.status,
+      detail.product,
+      detail.b,
+      detail.c,
+      detail.calculated,
+      detail.a,
+      detail.a - detail.calculated
+    ]);
+    
+    if (rows.length > 0) {
+      sheet.getRange(2, 1, rows.length, rows[0].length).setValues(rows);
+    }
+    
+    // 서식 설정
+    sheet.getRange(1, 1, 1, headers.length)
+      .setBackground('#4285f4')
+      .setFontColor('#ffffff')
+      .setFontWeight('bold');
+    
+    sheet.autoResizeColumns(1, headers.length);
+  }
+};
