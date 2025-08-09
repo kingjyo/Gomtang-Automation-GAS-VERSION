@@ -1,0 +1,167 @@
+/**
+ * 품목별 시트 분리
+ * ProductSplitter.gs
+ */
+
+const ProductSplitter = {
+  /**
+   * 품목별로 시트 분리
+   */
+  splitByProduct: function() {
+    try {
+      const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+      
+      // 날짜 추출
+      let datePrefix = getTodayDate();
+      const sheets = spreadsheet.getSheets();
+      
+      for (const sheet of sheets) {
+        const name = sheet.getName();
+        if ((name.includes(' 간편식 수기송장') && !name.startsWith('TEST_')) ||
+            (name.includes('_간편식_싸이버스카이') && !name.startsWith('TEST_'))) {
+          datePrefix = name.split(/[ _]/)[0];
+          break;
+        }
+      }
+      
+      const sourceSheetName = datePrefix + ' 간편식 수기송장';
+      
+      const sourceSheet = spreadsheet.getSheetByName(sourceSheetName);
+      if (!sourceSheet) {
+        return {
+          success: false,
+          error: '수기송장 시트를 찾을 수 없습니다: ' + sourceSheetName
+        };
+      }
+      
+      // 데이터 가져오기
+      const data = sourceSheet.getDataRange().getValues();
+      if (data.length < 2) {
+        return {
+          success: false,
+          error: '데이터가 없습니다.'
+        };
+      }
+      
+      const headers = data[0];
+      const rows = data.slice(1);
+      
+      // 품목명 열 찾기
+      let productColIndex = -1;
+      for (let i = 0; i < headers.length; i++) {
+        if (headers[i] === '품목명' || headers[i] === 'N') {
+          productColIndex = i;
+          break;
+        }
+      }
+      
+      if (productColIndex === -1) {
+        // N열(14번째 열, 인덱스 13) 사용
+        productColIndex = 13;
+      }
+      
+      // 품목별로 데이터 그룹화
+      const productGroups = this.groupByProduct(rows, productColIndex);
+      
+      // 각 품목별로 시트 생성
+      const createdSheets = [];
+      for (const [productKey, productData] of Object.entries(productGroups)) {
+        const sheetName = this.createProductSheet(
+          spreadsheet, 
+          productKey, 
+          productData.name, 
+          headers, 
+          productData.rows,
+          datePrefix
+        );
+        createdSheets.push(sheetName);
+      }
+      
+      return {
+        success: true,
+        sheets: createdSheets
+      };
+      
+    } catch (error) {
+      return {
+        success: false,
+        error: error.toString()
+      };
+    }
+  },
+  
+  /**
+   * 품목별로 데이터 그룹화
+   */
+  groupByProduct: function(rows, productColIndex) {
+    const groups = {};
+    
+    for (const row of rows) {
+      const productName = String(row[productColIndex] || '').trim();
+      if (!productName) continue;
+      
+      // 품목 키 결정
+      let productKey = '';
+      let displayName = productName;
+      
+      if (productName.includes('사골고기곰탕')) {
+        productKey = '사골고기곰탕';
+        displayName = '사골고기곰탕';
+      } else if (productName.includes('사골곰탕')) {
+        productKey = '사골곰탕';
+        displayName = '사골곰탕';
+      } else if (productName.includes('육포')) {
+        productKey = '육포';
+        displayName = '육포';
+      } else {
+        // 기타 품목은 전체 이름 사용
+        productKey = productName;
+        displayName = productName;
+      }
+      
+      if (!groups[productKey]) {
+        groups[productKey] = {
+          name: displayName,
+          rows: []
+        };
+      }
+      
+      groups[productKey].rows.push(row);
+    }
+    
+    return groups;
+  },
+  
+  /**
+   * 품목별 시트 생성
+   */
+  createProductSheet: function(spreadsheet, productKey, productName, headers, rows, datePrefix) {
+    const sheetName = datePrefix + ' ' + productName;
+    
+    // 기존 시트 삭제
+    let sheet = spreadsheet.getSheetByName(sheetName);
+    if (sheet) {
+      spreadsheet.deleteSheet(sheet);
+    }
+    
+    // 새 시트 생성
+    sheet = spreadsheet.insertSheet(sheetName);
+    
+    // 헤더 입력
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    
+    // 데이터 입력
+    if (rows.length > 0) {
+      sheet.getRange(2, 1, rows.length, rows[0].length).setValues(rows);
+    }
+    
+    // 서식 설정
+    sheet.getRange(1, 1, 1, headers.length)
+      .setBackground('#f0f0f0')
+      .setFontWeight('bold');
+    
+    sheet.autoResizeColumns(1, headers.length);
+    
+    return sheetName;
+  }
+};
