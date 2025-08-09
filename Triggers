@@ -1,0 +1,135 @@
+/**
+ * 자동 실행 트리거 설정
+ * Triggers.gs
+ */
+
+/**
+ * 트리거 설정 (메뉴에서 실행)
+ */
+function setupTriggers() {
+  try {
+    // 기존 트리거 제거
+    removeTriggers();
+    
+    // 매일 오후 2시 실행 트리거 생성
+    ScriptApp.newTrigger('dailyUpdate')
+      .timeBased()
+      .everyDays(1)
+      .atHour(14) // 오후 2시
+      .create();
+    
+    SpreadsheetApp.getUi().alert('✅ 자동 실행 설정 완료!\n매일 오후 2시에 싸이버스카이 데이터가 자동으로 업데이트됩니다.');
+    
+  } catch (error) {
+    SpreadsheetApp.getUi().alert('❌ 트리거 설정 실패: ' + error.toString());
+  }
+}
+
+/**
+ * 트리거 제거
+ */
+function removeTriggers() {
+  const triggers = ScriptApp.getProjectTriggers();
+  triggers.forEach(trigger => {
+    if (trigger.getHandlerFunction() === 'dailyUpdate') {
+      ScriptApp.deleteTrigger(trigger);
+    }
+  });
+}
+
+/**
+ * 매일 실행되는 함수
+ */
+function dailyUpdate() {
+  try {
+    // 설정 초기화
+    initializeConfig();
+    
+    // 싸이버스카이 데이터 업데이트
+    const result = CyberskyData.updateCyberskyData();
+    
+    if (result.success) {
+      // 로그 기록
+      logUpdate('싸이버스카이 자동 업데이트 성공', result);
+      
+      // EDI 데이터도 확인
+      checkAndUpdateEDI();
+    } else {
+      logUpdate('싸이버스카이 자동 업데이트 실패', result);
+    }
+    
+  } catch (error) {
+    logUpdate('자동 업데이트 오류', { error: error.toString() });
+  }
+}
+
+/**
+ * EDI 데이터 확인 및 업데이트
+ */
+function checkAndUpdateEDI() {
+  try {
+    const now = new Date();
+    const hours = now.getHours();
+    const minutes = now.getMinutes();
+    
+    // 오후 1시 ~ 3시 30분 사이면 EDI 확인
+    if ((hours === 13) || (hours === 14) || (hours === 15 && minutes <= 30)) {
+      const ediResult = EDIData.updateEDIData();
+      
+      if (ediResult.success) {
+        // EDI 데이터도 성공적으로 가져왔으면 데이터 처리
+        const processResult = DataProcessor.processData();
+        
+        if (processResult.success) {
+          logUpdate('EDI 업데이트 및 데이터 처리 완료', processResult);
+          
+          // 검산 실행
+          const verifyResult = Verification.runVerification();
+          logUpdate('검산 결과', verifyResult);
+        }
+      }
+    }
+  } catch (error) {
+    logUpdate('EDI 확인 오류', { error: error.toString() });
+  }
+}
+
+/**
+ * 업데이트 로그 기록
+ */
+function logUpdate(message, details) {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  let logSheet = spreadsheet.getSheetByName('업데이트_로그');
+  
+  // 로그 시트가 없으면 생성
+  if (!logSheet) {
+    logSheet = spreadsheet.insertSheet('업데이트_로그');
+    const headers = ['일시', '작업', '상태', '상세내용'];
+    logSheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    logSheet.getRange(1, 1, 1, headers.length)
+      .setBackground('#f0f0f0')
+      .setFontWeight('bold');
+  }
+  
+  // 로그 추가
+  const timestamp = new Date();
+  const status = details.success ? '성공' : '실패';
+  const detailsJson = JSON.stringify(details);
+  
+  const newRow = [timestamp, message, status, detailsJson];
+  logSheet.appendRow(newRow);
+  
+  // 오래된 로그 정리 (최근 100개만 유지)
+  const lastRow = logSheet.getLastRow();
+  if (lastRow > 101) {
+    logSheet.deleteRows(2, lastRow - 101);
+  }
+}
+
+/**
+ * 수동 테스트 실행
+ */
+function testDailyUpdate() {
+  dailyUpdate();
+  SpreadsheetApp.getUi().alert('테스트 실행 완료!\n업데이트_로그 시트에서 결과를 확인하세요.');
+}
