@@ -1,0 +1,101 @@
+/**
+ * Google Picker 기반 파일/폴더 선택기 (큰 창/한글/UI 안전부팅)
+ * 파일명: GooglePicker.gs
+ */
+
+function __init_setPickerConfigOnce() {
+  const props = PropertiesService.getScriptProperties();
+  // ↓ 콘솔에서 복사한 "전체" 키 그대로 넣으세요 (… 쓰지 말기)
+  props.setProperty('PICKER_API_KEY', 'AIzaSyBkzoaHZmYgrH9yOkr8dI3GXGM0RyxDABc');
+  props.setProperty('GCP_PROJECT_NUMBER', '840962145115');
+  SpreadsheetApp.getUi().alert('Picker 설정값 저장 완료');
+}
+
+function openGooglePicker() {
+  const html = HtmlService.createTemplateFromFile('PickerDialog').evaluate()
+    .setWidth(1100)   // 모달 자체를 크게
+    .setHeight(760)
+    .setTitle('구글 드라이브 파일/폴더 선택');
+  SpreadsheetApp.getUi().showModalDialog(html, '📁 구글 드라이브 설정');
+}
+
+/** HTML include 헬퍼 (템플릿에서 사용) */
+function include(name) {
+  return HtmlService.createHtmlOutputFromFile(name).getContent();
+}
+
+/** 일부 도메인에서 Drive root 접근 500 회피 → no-op */
+function ensureDriveScope() { return true; }
+
+function getOAuthToken() {
+  try { return ScriptApp.getOAuthToken(); }
+  catch (e) { console.error('OAuth 토큰 오류:', e); return null; }
+}
+
+function getPickerApiKey() {
+  return PropertiesService.getScriptProperties().getProperty('PICKER_API_KEY') || '';
+}
+
+function getPickerAppId() { // 선택
+  return PropertiesService.getScriptProperties().getProperty('GCP_PROJECT_NUMBER') || '';
+}
+
+/** 빠른 표시용(권한 불필요) */
+function getCurrentPickerSettingsLite() {
+  const p = PropertiesService.getScriptProperties();
+  return {
+    success: true,
+    settings: {
+      sourceSpreadsheetId: p.getProperty('SOURCE_SPREADSHEET_ID') || '',
+      sourceSpreadsheetName: '',
+      folderId: p.getProperty('FOLDER_ID') || '',
+      folderName: ''
+    }
+  };
+}
+
+/** 네트워크/세션 확인용 */
+function pingServer() {
+  return { ok: true, ts: new Date().toISOString() };
+}
+
+/** 이름 포함(권한 필요) */
+function getCurrentPickerSettings() {
+  const p = PropertiesService.getScriptProperties();
+  const ssId = p.getProperty('SOURCE_SPREADSHEET_ID') || '';
+  const folderId = p.getProperty('FOLDER_ID') || '';
+  return {
+    success: true,
+    settings: {
+      sourceSpreadsheetId: ssId,
+      sourceSpreadsheetName: getDisplayName(ssId),
+      folderId: folderId,
+      folderName: getDisplayName(folderId)
+    }
+  };
+}
+
+function getDisplayName(id) {
+  if (!id) return '';
+  try {
+    try { return SpreadsheetApp.openById(id).getName(); }
+    catch (e1) {
+      try { return DriveApp.getFolderById(id).getName(); }
+      catch (e2) {
+        try { return DriveApp.getFileById(id).getName(); }
+        catch (e3) { return '(접근 불가)'; }
+      }
+    }
+  } catch (e) { return '(접근 불가)'; }
+}
+
+function savePickerSelection(selection) {
+  try {
+    const p = PropertiesService.getScriptProperties();
+    if (selection?.spreadsheetId) p.setProperty('SOURCE_SPREADSHEET_ID', selection.spreadsheetId);
+    if (selection?.folderId) p.setProperty('FOLDER_ID', selection.folderId);
+    return { success: true, message: '설정이 저장되었습니다.' };
+  } catch (err) {
+    return { success: false, error: String(err) };
+  }
+}
