@@ -1,0 +1,258 @@
+/**
+ * 데이터 처리 로직
+ * DataProcessor.gs
+ */
+
+const DataProcessor = {
+  /**
+   * 메인 데이터 처리 함수
+   */
+  processData: function() {
+    try {
+      // 설정 초기화
+      if (typeof initializeConfig === 'function') {
+        initializeConfig();
+      }
+      
+      // A시트, B시트 데이터 가져오기
+      const sheetAData = CyberskyData.getSheetAData();
+      const sheetBData = EDIData.getSheetBData();
+      
+      if (!sheetAData || sheetAData.length < 2) {
+        throw new Error('A시트 데이터가 없습니다.');
+      }
+      
+      if (!sheetBData || sheetBData.length < 2) {
+        throw new Error('B시트 데이터가 없습니다.');
+      }
+      
+      // 헤더와 데이터 분리
+      const sheetAHeaders = sheetAData[0];
+      let sheetARows = sheetAData.slice(1);
+      
+      const sheetBHeaders = sheetBData[0];
+      const sheetBRows = sheetBData.slice(1);
+      
+      // 열 매핑
+      const colA = CyberskyData.getSheetAColumnMapping(sheetAHeaders);
+      const colB = EDIData.getSheetBColumnMapping(sheetBHeaders);
+      
+      // Step 1: B시트 주문번호 '32' 제거
+      const processedBRows = this.processBSheetData(sheetBRows, colB);
+      
+      // Step 2: A시트 주소 생성 및 처리
+      sheetARows = this.processASheetData(sheetARows, colA);
+      
+      // Step 3: 주문번호-상품명 매핑 및 수량 조정
+      sheetARows = this.adjustQuantities(sheetARows, processedBRows, colA, colB);
+      
+      // Step 4: 수량 0인 행 제거
+      sheetARows = sheetARows.filter(row => row[colA['ORDERCNT']] > 0);
+      
+      // Step 5: C시트 생성
+      this.createCSheet(sheetARows, colA);
+      
+      return {
+        success: true,
+        processedRows: sheetARows.length
+      };
+      
+    } catch (error) {
+      return {
+        success: false,
+        error: error.toString()
+      };
+    }
+  },
+  
+  /**
+   * B시트 데이터 처리
+   */
+  processBSheetData: function(rows, colMapping) {
+    const processedRows = [];
+    
+    for (const row of rows) {
+      const processedRow = [...row];
+      
+      // 주문번호 '32' 제거
+      if (colMapping['주문번호'] !== undefined) {
+        const orderNo = String(processedRow[colMapping['주문번호']]);
+        processedRow[colMapping['주문번호']] = orderNo.replace(/32$/, '');
+      }
+      
+      // 상품명 '|' 이후 제거
+      if (colMapping['상품명'] !== undefined) {
+        const productName = String(processedRow[colMapping['상품명']]);
+        processedRow[colMapping['상품명']] = productName.split('|')[0].trim();
+      }
+      
+      processedRows.push(processedRow);
+    }
+    
+    return processedRows;
+  },
+  
+  /**
+   * A시트 데이터 처리
+   */
+  processASheetData: function(rows, colMapping) {
+    const processedRows = [];
+    
+    for (const row of rows) {
+      const processedRow = [...row];
+      
+      // 주소 생성
+      const addr1 = String(processedRow[colMapping['ADDR1']] || '');
+      const addr2 = String(processedRow[colMapping['ADDR2']] || '');
+      const fullAddress = (addr1 + ' ' + addr2).trim();
+      
+      // DELYMONEY 열을 주소로 변경
+      if (colMapping['DELYMONEY'] !== undefined) {
+        processedRow[colMapping['DELYMONEY']] = fullAddress;
+        colMapping['주소'] = colMapping['DELYMONEY'];
+      }
+      
+      // MEM_ID가 KAL_CK_MMC가 아닌 경우 처리
+      const memId = String(processedRow[colMapping['MEM_ID']] || '');
+      if (memId !== 'KAL_CK_MMC') {
+        processedRow[colMapping['GROUP_IDX']] = processedRow[colMapping['ORDER_IDX']];
+        processedRow[colMapping['ORDER_IDX']] = '';
+      }
+      
+      processedRows.push(processedRow);
+    }
+    
+    return processedRows;
+  },
+  
+  /**
+   * 수량 조정
+   */
+  adjustQuantities: function(sheetARows, sheetBRows, colA, colB) {
+    // 주문번호-상품명 매핑 생성
+    const orderProdMap = {};
+    for (const row of sheetBRows) {
+      const orderNo = String(row[colB['주문번호']] || '');
+      const prodName = String(row[colB['상품명']] || '').trim();
+      if (orderNo && prodName) {
+        orderProdMap[orderNo] = prodName;
+      }
+    }
+    
+    // GROUP_IDX 카운트
+    const groupCounts = {};
+    for (const row of sheetARows) {
+      const groupId = String(row[colA['GROUP_IDX']] || '');
+      if (groupId) {
+        groupCounts[groupId] = (groupCounts[groupId] || 0) + 1;
+      }
+    }
+    
+    // 수량 감소 처리
+    const processedRows = [];
+    for (const row of sheetARows) {
+      const processedRow = [...row];
+      const groupId = String(processedRow[colA['GROUP_IDX']] || '');
+      const prodName = String(processedRow[colA['PROD_NAME']] || '').trim();
+      
+      if (groupId && orderProdMap[groupId]) {
+        const matchedName = orderProdMap[groupId];
+        const isDuplicate = groupCounts[groupId] > 1;
+        
+        if (isDuplicate) {
+          if (prodName === matchedName) {
+            processedRow[colA['ORDERCNT']] = Math.max(0, processedRow[colA['ORDERCNT']] - 1);
+          }
+        } else {
+          processedRow[colA['ORDERCNT']] = Math.max(0, processedRow[colA['ORDERCNT']] - 1);
+        }
+      }
+      
+      processedRows.push(processedRow);
+    }
+    
+    return processedRows;
+  },
+  
+  /**
+   * C시트 생성
+   */
+  createCSheet: function(processedARows, colA) {
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    
+    // A시트나 B시트에서 날짜 추출
+    let datePrefix = getTodayDate();
+    const sheets = spreadsheet.getSheets();
+    
+    for (const sheet of sheets) {
+      const name = sheet.getName();
+      if (name.includes('_간편식_싸이버스카이') && !name.startsWith('TEST_')) {
+        // YYYYMMDD 추출
+        datePrefix = name.split('_')[0];
+        break;
+      }
+    }
+    
+    const newSheetName = datePrefix + ' 간편식 수기송장';
+    
+    // 기존 시트 삭제
+    let targetSheet = spreadsheet.getSheetByName(newSheetName);
+    if (targetSheet) {
+      spreadsheet.deleteSheet(targetSheet);
+    }
+    
+    // 템플릿 시트 복사 또는 새 시트 생성
+    const templateSheet = spreadsheet.getSheetByName(CONFIG.MANUAL_TEMPLATE_SHEET_NAME);
+    if (templateSheet) {
+      targetSheet = templateSheet.copyTo(spreadsheet);
+      targetSheet.setName(newSheetName);
+      // 기존 데이터 삭제 (헤더 제외)
+      const lastRow = targetSheet.getLastRow();
+      if (lastRow > 1) {
+        targetSheet.deleteRows(2, lastRow - 1);
+      }
+    } else {
+      targetSheet = spreadsheet.insertSheet(newSheetName);
+      // 헤더 설정
+      const headers = [
+        '보내시는 분', '보내시는 분 전화', '보내시는 분 핸드폰', '휴대폰번호',
+        '보내는분우편번호', '보내는분총주소', '받으시는 분', '받으시는 분 전화',
+        '받으시는 분 우편', '받는분핸드폰', '받는분우편번호', '받는분총주소',
+        '수량', '품목명', '메모', '운임종류', '택배사'
+      ];
+      targetSheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    }
+    
+    // 데이터 변환 및 입력
+    const newRows = [];
+    for (const row of processedARows) {
+      const newRow = [
+        row[colA['ORDERER']] || '',                    // A: 보내시는 분
+        row[colA['PHONE']] || '',                      // B: 보내시는 분 전화
+        '',                                             // C: 보내시는 분 핸드폰
+        '',                                             // D: 휴대폰번호
+        CONFIG.SENDER_POSTAL_CODE,                     // E: 보내는분우편번호
+        CONFIG.SENDER_ADDRESS,                         // F: 보내는분총주소
+        row[colA['RECEIVER']] || '',                   // G: 받으시는 분
+        '',                                             // H: 받으시는 분 전화
+        '',                                             // I: 받으시는 분 우편
+        row[colA['CELL']] || '',                       // J: 받는분핸드폰
+        row[colA['POST_NO']] || '',                    // K: 받는분우편번호
+        row[colA['주소']] || '',                       // L: 받는분총주소
+        row[colA['ORDERCNT']] || 0,                    // M: 수량
+        row[colA['PROD_NAME']] || '',                  // N: 품목명
+        '',                                             // O: 메모
+        '',                                             // P: 운임종류
+        ''                                              // Q: 택배사
+      ];
+      newRows.push(newRow);
+    }
+    
+    // 데이터 입력
+    if (newRows.length > 0) {
+      targetSheet.getRange(2, 1, newRows.length, newRows[0].length).setValues(newRows);
+    }
+    
+    return targetSheet;
+  }
+};
