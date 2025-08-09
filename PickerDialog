@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8" />
+  <script src="https://apis.google.com/js/api.js"></script>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; margin:0; padding:20px; background:#f8f9fa; }
+    .container { background:#fff; border-radius:10px; padding:24px; box-shadow:0 1px 3px rgba(0,0,0,0.1); max-width:1060px; margin:0 auto; }
+    h2 { margin:0 0 8px; font-size:20px; font-weight:600; color:#202124; }
+    .subtitle { color:#5f6368; margin-bottom:14px; font-size:13px; }
+    .toolbar { display:flex; align-items:center; gap:12px; margin:8px 0 16px 0; }
+    .selection { border:1px solid #e0e0e0; border-radius:10px; padding:16px; margin-bottom:14px; background:#fafbfc; }
+    .title { font-size:14px; font-weight:600; color:#202124; margin-bottom:8px; display:flex; align-items:center; gap:8px; }
+    .current { border:1px solid #e0e0e0; border-radius:8px; background:#fff; padding:12px; min-height:18px; font-size:13px; margin-bottom:10px; color:#202124; }
+    .current.empty { color:#9aa0a6; font-style:italic; }
+    .btn { border:0; border-radius:8px; padding:9px 14px; font-size:13px; cursor:pointer; }
+    .btn.pick { background:#1a73e8; color:#fff; } .btn.pick:hover { background:#1765d1; }
+    .btn.text { background:transparent; color:#1a73e8; } .btn.text:hover { background:#f1f5ff; }
+    .btn.primary { background:#1a73e8; color:#fff; padding:10px 18px; }
+    .btn.primary:disabled { background:#eaecef; color:#9aa0a6; cursor:not-allowed; }
+    .footer { display:flex; justify-content:flex-end; gap:8px; margin-top:18px; padding-top:12px; border-top:1px solid #eceff1; }
+    .loading { display:none; color:#5f6368; text-align:center; padding:14px; }
+    .loading.show { display:block; }
+    .content { display:none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>파일 및 폴더 선택</h2>
+    <div class="subtitle">구글 드라이브에서 사용할 스프레드시트와 저장 폴더를 선택하세요.</div>
+
+    <!-- 상단 필터 -->
+    <div class="toolbar">
+      <label style="display:flex;align-items:center;gap:6px;">
+        <input type="checkbox" id="filterSheetsOnly" checked>
+        스프레드시트만 보기
+      </label>
+    </div>
+
+    <div id="loading" class="loading">설정을 불러오는 중...</div>
+
+    <div id="content" class="content">
+      <div class="selection">
+        <div class="title">📊 스프레드시트</div>
+        <div id="selectedSpreadsheet" class="current empty">선택된 파일이 없습니다</div>
+        <button class="btn pick" onclick="pickSpreadsheet()">스프레드시트 선택</button>
+      </div>
+
+      <div class="selection">
+        <div class="title">📁 저장 폴더</div>
+        <div id="selectedFolder" class="current empty">선택된 폴더가 없습니다</div>
+        <button class="btn pick" onclick="pickFolder()">폴더 선택</button>
+      </div>
+
+      <div class="footer">
+        <button class="btn text" onclick="google.script.host.close()">취소</button>
+        <button id="saveBtn" class="btn primary" onclick="saveSettings()" disabled>설정 저장</button>
+      </div>
+    </div>
+  </div>
+
+  <?!= include('PickerClient'); ?>
+</body>
+</html>
