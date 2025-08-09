@@ -4,30 +4,35 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a Google Apps Script (GAS) project for automating Korean food product (곰탕/Gomtang) order processing and shipping invoice generation. The system integrates data from Cybersky, EDI emails, and Coupang marketplace into standardized shipping formats.
+Google Apps Script (GAS) project for automating Korean food product (곰탕/Gomtang) order processing and shipping invoice generation. Integrates data from Cybersky, EDI emails, and Coupang marketplace into standardized shipping formats.
 
 ## Development Commands
 
-### Google Apps Script Development
-- **Deploy**: Use the Google Apps Script editor (script.google.com) - no local build process
-- **Test Functions**: Available in `TestFunctions.gs` - can be run directly from Apps Script editor
-- **View Logs**: Use `View > Logs` in Apps Script editor or check "업데이트_로그" sheet
-- **Trigger Setup**: Run `setupTriggers()` to enable daily automation at 2 PM
-
-### Common Development Tasks
 ```javascript
-// Test today's data processing
-testDailyUpdate()
+// Daily automation functions (Main.gs)
+updateCybersky()       // Import Cybersky data (prompts for date)
+updateTodayEDI()       // Import today's EDI from Gmail
+updateBoth()           // Run both imports simultaneously
+runDataProcessor()     // Process A+B sheets into C sheet
+runVerification()      // Validate data consistency
+splitByProduct()       // Generate product-specific sheets
 
-// Test specific date (MMDD format)
-testCyberskyByDate()  // Prompts for date
-testEDIByDate()       // Prompts for date
+// Testing functions (TestFunctions.gs)
+testDailyUpdate()      // Test full daily workflow
+testCyberskyByDate()   // Test specific date (MMDD format prompt)
+testEDIByDate()        // Test EDI for date (MMDD format prompt)
+testFullProcessByDate() // Test complete pipeline for date
+cleanTestSheets()      // Remove all TEST_ prefixed sheets
 
-// Clear test data
-cleanTestSheets()
+// UI functions
+openCoupangUploader()  // Open Coupang upload dialog
+openManualUploader()   // Open manual data upload dialog
+openGooglePicker()     // Configure Drive file/folder settings
+openSettings()         // Open settings dialog
 
-// Reset templates
-clearTemplates()
+// Configuration
+setupTriggers()        // Set up 2 PM daily automation
+initializeConfig()     // Load settings from PropertiesService
 ```
 
 ## Architecture
@@ -57,10 +62,9 @@ Main.gs (Central Controller)
 ```
 
 ### Key Configuration
-Located in `Main.gs`:
-- `CONFIG.SOURCE_SPREADSHEET_ID`: Source data spreadsheet
-- `CONFIG.FOLDER_ID`: Google Drive archive folder
-- Settings are persisted via `PropertiesService`
+- Settings stored in `PropertiesService` (Script Properties)
+- Initial values in `Main.gs` CONFIG object
+- UI configuration via Settings dialog or Google Picker
 
 ## Important Technical Details
 
@@ -94,19 +98,66 @@ The system handles three main product families:
 - HtmlService: Web UI for manual uploads
 - PropertiesService: Configuration persistence
 
-## Testing Approach
-Use `TestFunctions.gs` for isolated testing:
-- Test data prefixed with "TEST_" for easy cleanup
-- Date-specific testing available for historical debugging
-- Full pipeline simulation with `testFullProcessByDate()`
+## Testing Strategy
+- Test sheets prefixed with "TEST_" for isolation
+- Date-specific testing with MMDD format (e.g., "0807")
+- Full pipeline testing via `testFullProcessByDate()`
+- Clean up with `cleanTestSheets()`
 
 ## UI Components
-- **Menu System**: Added via `onOpen()` in Main.gs
-- **HTML Dialogs**: CoupangUploader, ManualUploader, Settings, DriveExplorer
-- **Google Picker**: For file/folder selection (requires OAuth setup)
+- **Menu System**: `onOpen()` in Main.gs creates menu items
+- **HTML Dialogs**: CoupangUploader, ManualUploader, Settings, DriveExplorer, GooglePicker
+- **Picker API**: Requires API key and project number in Script Properties
+
+## Debugging and Logging Guidelines
+
+When implementing new functions, always include comprehensive logging:
+
+```javascript
+function exampleFunction(param1, param2) {
+  console.log('=== Function Start: exampleFunction ===');
+  console.log('Parameters:', { param1, param2 });
+  
+  try {
+    console.log('Step 1: Validating inputs');
+    if (!param1) throw new Error('param1 is required');
+    
+    console.log('Step 2: Processing data');
+    const result = processData(param1, param2);
+    console.log('Processing result:', result);
+    
+    console.log('Step 3: Returning success');
+    console.log('=== Function End: exampleFunction SUCCESS ===');
+    return { success: true, data: result };
+    
+  } catch (error) {
+    console.error('ERROR in exampleFunction:', error.toString());
+    console.error('Error stack:', error.stack);
+    console.log('=== Function End: exampleFunction FAILED ===');
+    return { success: false, error: error.toString() };
+  }
+}
+```
+
+**Logging Standards:**
+- Start/end markers with function name for easy filtering
+- Log all input parameters (excluding sensitive data)
+- Log each major step with descriptive messages
+- Always log error details with stack traces
+- Use structured logging with objects when possible
+- Return consistent `{ success: boolean, data/error }` format
+
+**Task Completion Reporting:**
+Always list modified files at the end of each task for easy copying:
+```
+## Changed Files:
+- GooglePicker.gs: Added Drive API v3 support
+- PickerClient: Enhanced error handling
+- PickerDialog: Updated modal styling
+```
 
 ## Common Issues & Solutions
-1. **EDI Email Not Found**: Check Gmail search terms and sender address in EDIData.gs
-2. **Sheet Mapping Errors**: Verify column headers match expected format
-3. **Drive Permission Issues**: Ensure script has Drive API enabled
-4. **Quantity Mismatches**: Run `runVerification()` to identify discrepancies
+1. **EDI Email Not Found**: Check Gmail search query in `EDIData.getEDIFromEmail()`
+2. **Sheet Column Mismatch**: Verify headers in `getSheetAColumnMapping()` and `getSheetBColumnMapping()`
+3. **Drive Permission**: Enable Drive API in Google Cloud Console
+4. **Data Discrepancies**: Use `runVerification()` to identify mismatches

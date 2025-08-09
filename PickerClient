@@ -1,26 +1,24 @@
 <script>
-  let oauthToken = '';
-  let developerKey = '';
-  let appId = '';
+  // ===== 상태 관리 =====
   let selectedSpreadsheet = null;
   let selectedFolder = null;
-  let isReady = false;
+  let currentFolderId = 'root';
+  let currentPath = [];
+  let selectionMode = 'spreadsheet'; // 'spreadsheet' or 'folder'
+  let isSearchMode = false;
+  let currentSearchQuery = '';
+  let searchTimeout = null;
 
   const qs = (id) => document.getElementById(id);
-  const disablePickButtons = (disabled) =>
-    document.querySelectorAll('.btn.pick').forEach(b => b.disabled = disabled);
 
+  // ===== UI 헬퍼 =====
   function showContent() {
     qs('loading').classList.remove('show');
     qs('content').style.display = 'block';
   }
 
-  function ensureReadyOrWarn() {
-    if (!isReady || !oauthToken || !developerKey) {
-      alert('아직 준비 중입니다. 잠시 후 다시 시도해주세요.');
-      return false;
-    }
-    return true;
+  function updateSaveButton() {
+    qs('saveBtn').disabled = !(selectedSpreadsheet && selectedFolder);
   }
 
   function updateDisplay(settings) {
@@ -56,96 +54,176 @@
     updateSaveButton();
   }
 
-  function updateSaveButton() {
-    qs('saveBtn').disabled = !(selectedSpreadsheet && selectedFolder);
+  // ===== 드라이브 탐색기 =====
+  function openDriveExplorer(mode) {
+    selectionMode = mode;
+    const modal = qs('explorerModal');
+    const title = qs('explorerTitle');
+    
+    title.textContent = mode === 'spreadsheet' ? '스프레드시트 선택' : '폴더 선택';
+    modal.style.display = 'flex';
+    
+    // 루트 목록 로드
+    loadDriveRoots();
+    // 초기 폴더 내용 로드
+    loadFolderContents('root');
   }
 
-  function hydrateNames() {
+  function closeDriveExplorer() {
+    qs('explorerModal').style.display = 'none';
+  }
+
+  // 좌측 내비게이션 로드
+  function loadDriveRoots() {
+    console.log('=== UI Function Start: loadDriveRoots ===');
+    const sidebar = qs('explorerSidebar');
+    sidebar.innerHTML = '<div class="loading-text">로딩 중...</div>';
+    
     google.script.run
-      .withSuccessHandler(function (res) {
-        if (res?.success) updateDisplay(res.settings);
+      .withSuccessHandler(function(res) {
+        console.log('Drive roots response:', res);
+        if (res && res.success && res.roots) {
+          let html = '<div class="nav-section">';
+          res.roots.forEach(root => {
+            html += `
+              <div class="nav-item ${currentFolderId === root.id ? 'active' : ''}" 
+                   onclick="navigateToFolder('${root.id}', '${root.name}')">
+                <span class="nav-icon">${root.icon}</span>
+                <span class="nav-name">${root.name}</span>
+              </div>
+            `;
+          });
+          html += '</div>';
+          sidebar.innerHTML = html;
+          console.log('Drive roots loaded successfully');
+        } else {
+          console.error('Invalid response format:', res);
+          sidebar.innerHTML = '<div class="error-text">응답 형식 오류</div>';
+        }
       })
-      .withFailureHandler(function (err) {
-        console.warn('이름 보강 실패(무시):', err);
+      .withFailureHandler(function(err) {
+        console.error('Drive roots load failed:', err);
+        sidebar.innerHTML = '<div class="error-text">로드 실패</div>';
       })
-      .getCurrentPickerSettings();
+      .getDriveRoots();
   }
 
-  // ===== 스프레드시트 선택 =====
-  function pickSpreadsheet() {
-    if (!ensureReadyOrWarn()) return;
-
-    const sheetsView = new google.picker.DocsView(google.picker.ViewId.SPREADSHEETS)
-      .setMode(google.picker.DocsViewMode.LIST);
-
-    const builder = new google.picker.PickerBuilder()
-      .addView(sheetsView)
-      .setLocale('ko')
-      .setSize(1051, 650)
-      .enableFeature(google.picker.Feature.SUPPORT_DRIVES)
-      .setOAuthToken(oauthToken)
-      .setDeveloperKey(developerKey)
-      .setOrigin(google.script.host.origin)
-      .setSelectableMimeTypes('application/vnd.google-apps.spreadsheet');
-
-    if (appId) builder.setAppId(appId);
-
-    builder.setCallback(function (data) {
-      if (data[google.picker.Response.ACTION] === google.picker.Action.PICKED) {
-        const file = data[google.picker.Response.DOCUMENTS][0];
-        selectedSpreadsheet = {
-          id: file[google.picker.Document.ID],
-          name: file[google.picker.Document.NAME]
-        };
-        const el = qs('selectedSpreadsheet');
-        el.textContent = selectedSpreadsheet.name;
-        el.classList.remove('empty');
-        updateSaveButton();
-      }
-    }).build().setVisible(true);
+  // 폴더 내용 로드
+  function loadFolderContents(folderId) {
+    console.log('=== UI Function Start: loadFolderContents ===');
+    console.log('Parameters:', { folderId, selectionMode });
+    
+    const content = qs('explorerContent');
+    const breadcrumb = qs('explorerBreadcrumb');
+    
+    content.innerHTML = '<div class="loading-text">로딩 중...</div>';
+    currentFolderId = folderId;
+    
+    // 필터 타입 결정
+    const filterType = selectionMode === 'folder' ? 'all' : 'all';
+    console.log('Filter type:', filterType);
+    
+    google.script.run
+      .withSuccessHandler(function(res) {
+        console.log('Folder contents response:', res);
+        if (res && res.success) {
+          displayFolderContents(res.items);
+          updateBreadcrumb(folderId);
+        } else {
+          console.error('Invalid folder contents response:', res);
+          content.innerHTML = '<div class="error-text">응답 형식 오류</div>';
+        }
+      })
+      .withFailureHandler(function(err) {
+        console.error('Folder contents load failed:', err);
+        content.innerHTML = '<div class="error-text">로드 실패: ' + err.message + '</div>';
+      })
+      .getDriveFolderContents(folderId, filterType);
   }
 
-  // ===== 폴더 선택 =====
-  function pickFolder() {
-    if (!ensureReadyOrWarn()) return;
-
-    const foldersView = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
-      .setIncludeFolders(true)
-      .setSelectFolderEnabled(true)
-      .setMode(google.picker.DocsViewMode.LIST);
-
-    const builder = new google.picker.PickerBuilder()
-      .addView(foldersView)
-      .setLocale('ko')
-      .setSize(1051, 650)
-      .enableFeature(google.picker.Feature.SUPPORT_DRIVES)
-      .setOAuthToken(oauthToken)
-      .setDeveloperKey(developerKey)
-      .setOrigin(google.script.host.origin);
-
-    if (appId) builder.setAppId(appId);
-
-    builder.setCallback(function (data) {
-      if (data[google.picker.Response.ACTION] === google.picker.Action.PICKED) {
-        const file = data[google.picker.Response.DOCUMENTS][0];
-        selectedFolder = {
-          id: file[google.picker.Document.ID],
-          name: file[google.picker.Document.NAME]
-        };
-        const el = qs('selectedFolder');
-        el.textContent = selectedFolder.name;
-        el.classList.remove('empty');
-        updateSaveButton();
-      }
-    }).build().setVisible(true);
+  // 폴더 내용 표시
+  function displayFolderContents(items) {
+    const content = qs('explorerContent');
+    
+    if (!items || items.length === 0) {
+      content.innerHTML = '<div class="empty-text">폴더가 비어있습니다</div>';
+      return;
+    }
+    
+    let html = '<div class="file-grid">';
+    items.forEach(item => {
+      const isSelectable = (selectionMode === 'spreadsheet' && item.mimeType === 'application/vnd.google-apps.spreadsheet') ||
+                          (selectionMode === 'folder' && item.type === 'folder');
+      
+      html += `
+        <div class="file-item ${isSelectable ? 'selectable' : ''}" 
+             onclick="${item.type === 'folder' ? `navigateToFolder('${item.id}', '${item.name}')` : 
+                       (isSelectable ? `selectItem('${item.id}', '${item.name}')` : 'void(0)')}">
+          <div class="file-icon">${item.icon}</div>
+          <div class="file-name">${item.name}</div>
+        </div>
+      `;
+    });
+    html += '</div>';
+    content.innerHTML = html;
   }
 
+  // Breadcrumb 업데이트
+  function updateBreadcrumb(folderId) {
+    google.script.run
+      .withSuccessHandler(function(res) {
+        if (res.success) {
+          const breadcrumb = qs('explorerBreadcrumb');
+          let html = '';
+          res.path.forEach((item, index) => {
+            if (index > 0) html += ' > ';
+            html += `<span class="breadcrumb-item" onclick="navigateToFolder('${item.id}', '${item.name}')">${item.name}</span>`;
+          });
+          breadcrumb.innerHTML = html;
+          currentPath = res.path;
+        }
+      })
+      .getDrivePath(folderId);
+  }
+
+  // 폴더 이동
+  function navigateToFolder(folderId, folderName) {
+    loadFolderContents(folderId);
+    
+    // 좌측 내비게이션 활성 상태 업데이트
+    document.querySelectorAll('.nav-item').forEach(item => {
+      item.classList.remove('active');
+    });
+    event.currentTarget?.classList.add('active');
+  }
+
+  // 아이템 선택
+  function selectItem(id, name) {
+    if (selectionMode === 'spreadsheet') {
+      selectedSpreadsheet = { id, name };
+      qs('selectedSpreadsheet').textContent = name;
+      qs('selectedSpreadsheet').classList.remove('empty');
+    } else {
+      selectedFolder = { id, name };
+      qs('selectedFolder').textContent = name;
+      qs('selectedFolder').classList.remove('empty');
+    }
+    
+    closeDriveExplorer();
+    updateSaveButton();
+  }
+
+  // ===== 저장 =====
   function saveSettings() {
     if (!selectedSpreadsheet || !selectedFolder) {
       alert('스프레드시트와 폴더를 모두 선택해주세요.');
       return;
     }
-    const selection = { spreadsheetId: selectedSpreadsheet.id, folderId: selectedFolder.id };
+    
+    const selection = { 
+      spreadsheetId: selectedSpreadsheet.id, 
+      folderId: selectedFolder.id 
+    };
 
     google.script.run
       .withSuccessHandler(function (res) {
@@ -163,71 +241,108 @@
       .savePickerSelection(selection);
   }
 
-  // ===== 부팅 순서: 서버 핑 → ✅Drive 스코프 워밍업 → 토큰 → 키 → AppId → Lite 설정 → 이름 보강
+  // ===== 검색 기능 =====
+  function handleSearch(event) {
+    const query = event.target.value.trim();
+    
+    // 디바운싱: 300ms 후에 검색 실행
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+    
+    searchTimeout = setTimeout(() => {
+      if (query === '') {
+        // 검색어가 비어있으면 원래 폴더로 돌아가기
+        if (isSearchMode) {
+          isSearchMode = false;
+          currentSearchQuery = '';
+          loadFolderContents(currentFolderId);
+        }
+      } else {
+        // 검색 실행
+        performSearch(query);
+      }
+    }, 300);
+  }
+
+  function performSearch(query) {
+    console.log('=== UI Function Start: performSearch ===');
+    console.log('Search query:', query);
+    console.log('Current folder context:', currentFolderId);
+    
+    isSearchMode = true;
+    currentSearchQuery = query;
+    
+    const content = qs('explorerContent');
+    const breadcrumb = qs('explorerBreadcrumb');
+    
+    content.innerHTML = '<div class="loading-text">검색 중...</div>';
+    
+    // 검색 컨텍스트에 따른 breadcrumb 메시지
+    let contextMessage = '';
+    if (currentFolderId === 'root') {
+      contextMessage = '내 드라이브에서';
+    } else if (currentFolderId === 'sharedWithMe') {
+      contextMessage = '공유 문서함에서';
+    } else if (currentFolderId === 'sharedDrives') {
+      contextMessage = '공유 드라이브에서';
+    } else if (currentFolderId === 'recent') {
+      contextMessage = '최근 항목에서';
+    } else {
+      contextMessage = '현재 폴더에서';
+    }
+    
+    breadcrumb.innerHTML = `${contextMessage} 검색: "${query}"`;
+    
+    // 필터 타입 결정
+    const filterType = selectionMode === 'folder' ? 'all' : 'all';
+    
+    google.script.run
+      .withSuccessHandler(function(res) {
+        console.log('Search response:', res);
+        if (res && res.success) {
+          if (res.items.length === 0) {
+            content.innerHTML = '<div class="empty-text">검색 결과가 없습니다</div>';
+          } else {
+            displayFolderContents(res.items);
+          }
+        } else {
+          console.error('Invalid search response:', res);
+          content.innerHTML = '<div class="error-text">검색 실패</div>';
+        }
+      })
+      .withFailureHandler(function(err) {
+        console.error('Search failed:', err);
+        content.innerHTML = '<div class="error-text">검색 실패: ' + err.message + '</div>';
+      })
+      .searchDriveFiles(query, filterType, currentFolderId);
+  }
+
+  function clearSearch() {
+    const searchInput = qs('searchInput');
+    searchInput.value = '';
+    isSearchMode = false;
+    currentSearchQuery = '';
+    loadFolderContents(currentFolderId);
+  }
+
+  // ===== 초기화 =====
   function boot() {
     qs('loading').classList.add('show');
-    disablePickButtons(true);
-
-    const gapiTimer = setTimeout(() => {
-      showContent();
-      alert('Google API 로드가 지연됩니다. 네트워크/차단(apis.google.com) 확인 후 다시 시도하세요.');
-    }, 8000);
-
-    gapi.load('picker', {
-      callback: function () {
-        clearTimeout(gapiTimer);
-
-        google.script.run
-          .withSuccessHandler(function () {
-
-            // 1) ✅ Drive 스코프 워밍업 (권한 승인 유도)
-            google.script.run.withSuccessHandler(function () {
-
-              // 2) 토큰
-              google.script.run.withSuccessHandler(function (token) {
-                oauthToken = token || '';
-
-                // 3) API 키
-                google.script.run.withSuccessHandler(function (key) {
-                  developerKey = key || '';
-
-                  // 4) AppId (선택)
-                  google.script.run.withSuccessHandler(function (id) {
-                    appId = id || '';
-
-                    // 5) 설정 표시
-                    google.script.run
-                      .withSuccessHandler(function (res) {
-                        showContent();
-                        if (res?.success) updateDisplay(res.settings);
-                        isReady = !!(oauthToken && developerKey);
-                        disablePickButtons(!isReady);
-                        hydrateNames(); // 실패해도 무시
-                      })
-                      .withFailureHandler(function (err) {
-                        showContent();
-                        alert('설정을 불러오는 중 오류가 발생했습니다.');
-                        console.error(err);
-                      })
-                      .getCurrentPickerSettingsLite();
-
-                  }).getPickerAppId();
-
-                }).getPickerApiKey();
-
-              }).getOAuthToken();
-
-            }).ensureDriveScope()
-
-          })
-          .withFailureHandler(function (err) {
-            showContent();
-            alert('서버 연결에 실패했습니다. 네트워크 상태를 확인하세요.');
-            console.error(err);
-          })
-          .pingServer();
-      }
-    });
+    
+    // 현재 설정 로드
+    google.script.run
+      .withSuccessHandler(function(res) {
+        showContent();
+        if (res?.success) {
+          updateDisplay(res.settings);
+        }
+      })
+      .withFailureHandler(function(err) {
+        showContent();
+        console.error('설정 로드 실패:', err);
+      })
+      .getCurrentPickerSettings();
   }
 
   window.addEventListener('load', boot);

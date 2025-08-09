@@ -1,13 +1,13 @@
 /**
- * Google Picker 기반 파일/폴더 선택기 (좌측 내비게이션 지원)
+ * Google Drive 탐색기 기반 파일/폴더 선택기
  * 파일명: GooglePicker.gs
  */
 
 function __init_setPickerConfigOnce() {
   const props = PropertiesService.getScriptProperties();
   // 이미 저장해둔 값 사용해도 됩니다.
-  props.setProperty('PICKER_API_KEY', 'YOUR_PICKER_API_KEY');
-  props.setProperty('GCP_PROJECT_NUMBER', 'YOUR_GCP_PROJECT_NUMBER');
+  props.setProperty('PICKER_API_KEY', 'AIzaSyBkzoaHZmYgrH9yOkr8dI3GXGM0RyxDABc');
+  props.setProperty('GCP_PROJECT_NUMBER', '840962145115');
   SpreadsheetApp.getUi().alert('Picker 설정값 저장 완료');
 }
 
@@ -109,5 +109,487 @@ function savePickerSelection(selection) {
     return { success: true, message: '설정이 저장되었습니다.' };
   } catch (err) {
     return { success: false, error: String(err) };
+  }
+}
+
+/**
+ * 루트 폴더 목록 가져오기 (좌측 내비게이션용)
+ */
+function getDriveRoots() {
+  console.log('=== Function Start: getDriveRoots ===');
+  
+  try {
+    const roots = [];
+    
+    // 내 드라이브
+    console.log('Step 1: Adding My Drive');
+    roots.push({
+      id: 'root',
+      name: '내 드라이브',
+      type: 'my_drive',
+      icon: '📁'
+    });
+    
+    // 공유 드라이브 카테고리 (개별 드라이브가 아닌 카테고리)
+    console.log('Step 2: Adding Shared Drives category');
+    roots.push({
+      id: 'sharedDrives',
+      name: '공유 드라이브',
+      type: 'shared_drives_category',
+      icon: '📁'
+    });
+    
+    // 공유 문서함
+    console.log('Step 3: Adding shared with me');
+    roots.push({
+      id: 'sharedWithMe',
+      name: '공유 문서함',
+      type: 'shared',
+      icon: '👥'
+    });
+    
+    // 최근 항목
+    console.log('Step 4: Adding recent items');
+    roots.push({
+      id: 'recent',
+      name: '최근 항목',
+      type: 'recent',
+      icon: '🕐'
+    });
+    
+    console.log('Final roots array:', roots);
+    console.log('=== Function End: getDriveRoots SUCCESS ===');
+    return { success: true, roots };
+    
+  } catch (error) {
+    console.error('ERROR in getDriveRoots:', error.toString());
+    console.error('Error stack:', error.stack);
+    console.log('=== Function End: getDriveRoots FAILED ===');
+    return { success: false, error: error.toString() };
+  }
+}
+
+/**
+ * 공유 드라이브 목록 가져오기 (공유 드라이브 카테고리 클릭 시)
+ */
+function getSharedDrivesList() {
+  console.log('=== Function Start: getSharedDrivesList ===');
+  
+  try {
+    const drives = [];
+    
+    console.log('Step 1: Fetching shared drives list');
+    try {
+      // Drive.Drives API 사용
+      const sharedDrives = Drive.Drives.list({ pageSize: 100 });
+      console.log('Shared drives response:', sharedDrives);
+      
+      if (sharedDrives.drives && sharedDrives.drives.length > 0) {
+        console.log(`Found ${sharedDrives.drives.length} shared drives`);
+        sharedDrives.drives.forEach(drive => {
+          drives.push({
+            id: drive.id,
+            name: drive.name,
+            type: 'folder',  // 폴더처럼 취급
+            mimeType: 'application/vnd.google-apps.folder',
+            icon: '📁'
+          });
+        });
+      } else {
+        console.log('No shared drives found');
+      }
+    } catch (e) {
+      console.error('Failed to fetch shared drives:', e);
+      return { success: false, error: e.toString() };
+    }
+    
+    console.log(`Returning ${drives.length} shared drives`);
+    console.log('=== Function End: getSharedDrivesList SUCCESS ===');
+    return { success: true, items: drives, folderId: 'sharedDrives' };
+    
+  } catch (error) {
+    console.error('ERROR in getSharedDrivesList:', error.toString());
+    console.error('Error stack:', error.stack);
+    console.log('=== Function End: getSharedDrivesList FAILED ===');
+    return { success: false, error: error.toString() };
+  }
+}
+
+/**
+ * 폴더 내용 가져오기
+ */
+function getDriveFolderContents(folderId, filterType = 'all') {
+  console.log('=== Function Start: getDriveFolderContents ===');
+  console.log('Parameters:', { folderId, filterType });
+  
+  try {
+    const items = [];
+    let query = '';
+    
+    console.log('Step 1: Building query for folder:', folderId);
+    
+    // 기본 쿼리 설정
+    if (folderId === 'root') {
+      query = "'root' in parents and trashed = false";
+    } else if (folderId === 'sharedWithMe') {
+      query = "sharedWithMe and trashed = false";
+    } else if (folderId === 'sharedDrives') {
+      // 공유 드라이브 목록을 별도 함수로 처리
+      console.log('Special case: shared drives category');
+      console.log('=== Function End: getDriveFolderContents SUCCESS (delegating to getSharedDrivesList) ===');
+      return getSharedDrivesList();
+    } else if (folderId === 'recent') {
+      // 최근 항목: 최근 30일간 수정된 파일
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const dateStr = thirtyDaysAgo.toISOString();
+      query = `modifiedTime > '${dateStr}' and trashed = false`;
+    } else {
+      query = `'${folderId}' in parents and trashed = false`;
+    }
+    
+    // 타입 필터 추가
+    if (filterType === 'spreadsheet') {
+      query += " and mimeType = 'application/vnd.google-apps.spreadsheet'";
+    } else if (filterType === 'folder') {
+      query += " and mimeType = 'application/vnd.google-apps.folder'";
+    }
+    
+    console.log('Step 2: Executing query:', query);
+    
+    // 파일 목록 가져오기 - Drive API v3 형식으로 업그레이드
+    const requestParams = {
+      q: query,
+      pageSize: folderId === 'recent' ? 50 : 100, // v3에서는 pageSize 사용
+      orderBy: folderId === 'recent' ? 'modifiedTime desc' : 'folder,name', // v3에서는 modifiedTime, name 사용
+      fields: 'files(id,name,mimeType,parents,modifiedTime)', // v3에서는 files, name 사용
+      supportsAllDrives: true, // v3에서는 supportsAllDrives 사용
+      includeItemsFromAllDrives: true // v3에서는 includeItemsFromAllDrives 사용
+    };
+    
+    console.log('Step 3: Making API request with params:', requestParams);
+    const files = Drive.Files.list(requestParams);
+    console.log('API response:', files);
+    
+    if (files.files && files.files.length > 0) {
+      console.log(`Step 4: Processing ${files.files.length} items`);
+      files.files.forEach(file => {
+        const isFolder = file.mimeType === 'application/vnd.google-apps.folder';
+        const isSpreadsheet = file.mimeType === 'application/vnd.google-apps.spreadsheet';
+        
+        // 필터링
+        if (filterType === 'all' || 
+            (filterType === 'spreadsheet' && isSpreadsheet) ||
+            (filterType === 'folder' && isFolder)) {
+          
+          items.push({
+            id: file.id,
+            name: file.name, // v3에서는 name 사용
+            type: isFolder ? 'folder' : 'file',
+            mimeType: file.mimeType,
+            icon: isFolder ? '📁' : (isSpreadsheet ? '<i class="fa-solid fa-file-excel"></i>' : '📄'),
+            modifiedDate: file.modifiedTime // v3에서는 modifiedTime 사용
+          });
+        }
+      });
+    } else {
+      console.log('Step 4: No items found');
+    }
+    
+    console.log(`Step 5: Returning ${items.length} filtered items`);
+    console.log('=== Function End: getDriveFolderContents SUCCESS ===');
+    return { success: true, items, folderId };
+    
+  } catch (error) {
+    console.error('ERROR in getDriveFolderContents:', error.toString());
+    console.error('Error stack:', error.stack);
+    console.log('=== Function End: getDriveFolderContents FAILED ===');
+    return { success: false, error: error.toString() };
+  }
+}
+
+/**
+ * 폴더 경로 가져오기 (breadcrumb용)
+ */
+function getDrivePath(folderId) {
+  console.log('=== Function Start: getDrivePath ===');
+  console.log('Parameters:', { folderId });
+  
+  try {
+    const path = [];
+    let currentId = folderId;
+    
+    console.log('Step 1: Checking for special folder IDs');
+    
+    if (folderId === 'root') {
+      console.log('Special case: root folder');
+      console.log('=== Function End: getDrivePath SUCCESS ===');
+      return { success: true, path: [{ id: 'root', name: '내 드라이브' }] };
+    }
+    
+    if (folderId === 'sharedWithMe') {
+      console.log('Special case: shared with me');
+      console.log('=== Function End: getDrivePath SUCCESS ===');
+      return { success: true, path: [{ id: 'sharedWithMe', name: '공유 문서함' }] };
+    }
+    
+    if (folderId === 'sharedDrives') {
+      console.log('Special case: shared drives category');
+      console.log('=== Function End: getDrivePath SUCCESS ===');
+      return { success: true, path: [{ id: 'sharedDrives', name: '공유 드라이브' }] };
+    }
+    
+    if (folderId === 'recent') {
+      console.log('Special case: recent items');
+      console.log('=== Function End: getDrivePath SUCCESS ===');
+      return { success: true, path: [{ id: 'recent', name: '최근 항목' }] };
+    }
+    
+    console.log('Step 2: Building path for regular folder');
+    
+    // 폴더 경로 추적
+    while (currentId && currentId !== 'root') {
+      try {
+        console.log('Getting file info for ID:', currentId);
+        const file = Drive.Files.get(currentId, { 
+          supportsAllDrives: true, // v3에서는 supportsAllDrives 사용
+          fields: 'id,name,parents' // v3에서는 name 사용
+        });
+        console.log('File info:', { id: file.id, name: file.name, parents: file.parents });
+        
+        path.unshift({ id: file.id, name: file.name }); // v3에서는 name 사용
+        
+        if (file.parents && file.parents.length > 0) {
+          currentId = file.parents[0].id;
+          console.log('Moving to parent:', currentId);
+        } else {
+          console.log('No parent found, breaking');
+          break;
+        }
+      } catch (e) {
+        console.error('Error getting file info:', e);
+        break;
+      }
+    }
+    
+    // 루트 추가
+    if (currentId === 'root') {
+      console.log('Step 3: Adding root to path');
+      path.unshift({ id: 'root', name: '내 드라이브' });
+    }
+    
+    console.log('Final path:', path);
+    console.log('=== Function End: getDrivePath SUCCESS ===');
+    return { success: true, path };
+    
+  } catch (error) {
+    console.error('ERROR in getDrivePath:', error.toString());
+    console.error('Error stack:', error.stack);
+    console.log('=== Function End: getDrivePath FAILED ===');
+    return { success: false, error: error.toString() };
+  }
+}
+
+/**
+ * 파일/폴더 검색 기능 (현재 폴더 컨텍스트 내에서)
+ */
+function searchDriveFiles(query, filterType = 'all', currentFolderId = 'root') {
+  console.log('=== Function Start: searchDriveFiles ===');
+  console.log('Parameters:', { query, filterType, currentFolderId });
+  
+  try {
+    if (!query || query.trim() === '') {
+      console.log('Empty query, returning empty results');
+      console.log('=== Function End: searchDriveFiles SUCCESS (empty) ===');
+      return { success: true, items: [], query: '' };
+    }
+    
+    const items = [];
+    let searchQuery = `name contains '${query.trim()}' and trashed = false`;
+    
+    // 현재 폴더 컨텍스트 추가
+    console.log('Step 1: Adding folder context to search');
+    if (currentFolderId === 'root') {
+      searchQuery += " and 'root' in parents";
+    } else if (currentFolderId === 'sharedWithMe') {
+      searchQuery += " and sharedWithMe";
+    } else if (currentFolderId === 'recent') {
+      // 최근 항목은 전역 검색이지만 날짜 제한 추가
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const dateStr = thirtyDaysAgo.toISOString();
+      searchQuery += ` and modifiedTime > '${dateStr}'`;
+    } else if (currentFolderId !== 'sharedDrives' && currentFolderId !== 'recent') {
+      // 특정 폴더 내 검색
+      searchQuery += ` and '${currentFolderId}' in parents`;
+    }
+    // 공유 드라이브 카테고리의 경우 별도 처리
+    
+    // 타입 필터 추가
+    if (filterType === 'spreadsheet') {
+      searchQuery += " and mimeType = 'application/vnd.google-apps.spreadsheet'";
+    } else if (filterType === 'folder') {
+      searchQuery += " and mimeType = 'application/vnd.google-apps.folder'";
+    }
+    
+    console.log('Step 2: Final search query:', searchQuery);
+    
+    // 공유 드라이브 카테고리의 경우 별도 처리
+    if (currentFolderId === 'sharedDrives') {
+      console.log('Step 3: Special handling for shared drives category search');
+      // 모든 공유 드라이브에서 검색
+      try {
+        const drives = Drive.Drives.list({ pageSize: 100 });
+        if (drives.drives && drives.drives.length > 0) {
+          for (const drive of drives.drives) {
+            if (drive.name.toLowerCase().includes(query.toLowerCase())) {
+              items.push({
+                id: drive.id,
+                name: drive.name,
+                type: 'folder',
+                mimeType: 'application/vnd.google-apps.folder',
+                icon: '📁',
+                modifiedDate: null
+              });
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Failed to search shared drives:', e);
+      }
+      
+      console.log(`Step 4: Found ${items.length} matching shared drives`);
+      console.log('=== Function End: searchDriveFiles SUCCESS (shared drives) ===');
+      return { success: true, items, query: query.trim(), searchContext: 'sharedDrives' };
+    }
+    
+    // 개별 공유 드라이브 내부 검색 처리
+    console.log('Step 3: Checking if current folder is in a shared drive');
+    let sharedDriveId = null;
+    try {
+      if (currentFolderId !== 'root' && currentFolderId !== 'sharedWithMe' && currentFolderId !== 'recent') {
+        // 먼저 현재 폴더가 직접 공유 드라이브인지 확인
+        const drives = Drive.Drives.list({ pageSize: 100 });
+        if (drives.drives) {
+          const directDrive = drives.drives.find(drive => drive.id === currentFolderId);
+          if (directDrive) {
+            sharedDriveId = currentFolderId;
+          } else {
+            // 현재 폴더가 공유 드라이브의 하위 폴더인지 확인
+            const fileInfo = Drive.Files.get(currentFolderId, { 
+              supportsAllDrives: true,
+              fields: 'driveId'
+            });
+            if (fileInfo.driveId) {
+              sharedDriveId = fileInfo.driveId;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.log('Could not check shared drives:', e);
+    }
+    
+    if (sharedDriveId) {
+      console.log('Step 4: Searching within entire shared drive:', sharedDriveId);
+      // 공유 드라이브 전체에서 검색 (parents 조건 제거)
+      searchQuery = `name contains '${query.trim()}' and trashed = false`;
+    }
+    
+    // 일반 검색 실행
+    const requestParams = {
+      q: searchQuery,
+      pageSize: 50, // 검색 결과는 50개로 제한
+      orderBy: 'name', // 이름순 정렬
+      fields: 'files(id,name,mimeType,parents,modifiedTime)',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true
+    };
+    
+    // 공유 드라이브 내부 검색의 경우 driveId 지정
+    if (sharedDriveId) {
+      requestParams.driveId = sharedDriveId;
+      requestParams.corpora = 'drive';
+    }
+    
+    const files = Drive.Files.list(requestParams);
+    console.log('Search API response:', files);
+    
+    if (files.files && files.files.length > 0) {
+      console.log(`Step 2: Processing ${files.files.length} search results`);
+      files.files.forEach(file => {
+        const isFolder = file.mimeType === 'application/vnd.google-apps.folder';
+        const isSpreadsheet = file.mimeType === 'application/vnd.google-apps.spreadsheet';
+        
+        // 필터링
+        if (filterType === 'all' || 
+            (filterType === 'spreadsheet' && isSpreadsheet) ||
+            (filterType === 'folder' && isFolder)) {
+          
+          items.push({
+            id: file.id,
+            name: file.name,
+            type: isFolder ? 'folder' : 'file',
+            mimeType: file.mimeType,
+            icon: isFolder ? '📁' : (isSpreadsheet ? '<i class="fa-solid fa-file-excel"></i>' : '📄'),
+            modifiedDate: file.modifiedTime
+          });
+        }
+      });
+    } else {
+      console.log('Step 2: No search results found');
+    }
+    
+    console.log(`Step 5: Returning ${items.length} filtered search results`);
+    console.log('=== Function End: searchDriveFiles SUCCESS ===');
+    return { success: true, items, query: query.trim(), searchContext: currentFolderId };
+    
+  } catch (error) {
+    console.error('ERROR in searchDriveFiles:', error.toString());
+    console.error('Error stack:', error.stack);
+    console.log('=== Function End: searchDriveFiles FAILED ===');
+    return { success: false, error: error.toString() };
+  }
+}
+
+/**
+ * 디버그용 - 공유 드라이브 목록 확인
+ */
+function testSharedDrives() {
+  try {
+    console.log('=== 공유 드라이브 테스트 시작 ===');
+    
+    // 방법 1: Drive.Drives.list (v3)
+    try {
+      const drives = Drive.Drives.list({ pageSize: 100 });
+      console.log('Drive.Drives.list 결과:', drives);
+    } catch (e) {
+      console.log('Drive.Drives.list 실패:', e);
+    }
+    
+    // 방법 2: Drive.Teamdrives.list (v2)
+    try {
+      const teamDrives = Drive.Teamdrives.list({ pageSize: 100 });
+      console.log('Drive.Teamdrives.list 결과:', teamDrives);
+    } catch (e) {
+      console.log('Drive.Teamdrives.list 실패:', e);
+    }
+    
+    // 방법 3: UrlFetch 직접 호출
+    try {
+      const url = 'https://www.googleapis.com/drive/v2/teamdrives';
+      const response = UrlFetchApp.fetch(url, {
+        headers: {
+          'Authorization': 'Bearer ' + ScriptApp.getOAuthToken()
+        }
+      });
+      console.log('UrlFetch 결과:', response.getContentText());
+    } catch (e) {
+      console.log('UrlFetch 실패:', e);
+    }
+    
+    console.log('=== 공유 드라이브 테스트 완료 ===');
+  } catch (error) {
+    console.log('전체 테스트 실패:', error);
   }
 }
