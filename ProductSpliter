@@ -24,13 +24,20 @@ const ProductSplitter = {
         }
       }
       
-      const sourceSheetName = datePrefix + ' 간편식 수기송장';
+      const sourceSheetName = datePrefix + '_간편식_수기송장';
+      const sourceSheetNameOld = datePrefix + ' 간편식 수기송장'; // 기존 형식 호환
       
-      const sourceSheet = spreadsheet.getSheetByName(sourceSheetName);
+      let sourceSheet = spreadsheet.getSheetByName(sourceSheetName);
+      
+      // 새 형식이 없으면 기존 형식 시도
+      if (!sourceSheet) {
+        sourceSheet = spreadsheet.getSheetByName(sourceSheetNameOld);
+      }
+      
       if (!sourceSheet) {
         return {
           success: false,
-          error: '수기송장 시트를 찾을 수 없습니다: ' + sourceSheetName
+          error: '수기송장 시트를 찾을 수 없습니다: ' + sourceSheetName + ' 또는 ' + sourceSheetNameOld
         };
       }
       
@@ -133,35 +140,109 @@ const ProductSplitter = {
   },
   
   /**
-   * 품목별 시트 생성
+   * 품목별 시트 생성 (템플릿 시트 복사 사용)
    */
   createProductSheet: function(spreadsheet, productKey, productName, headers, rows, datePrefix) {
-    const sheetName = datePrefix + ' ' + productName;
+    console.log('=== Product Sheet Creation Start ===');
+    console.log('Parameters:', { productKey, productName, datePrefix, rowCount: rows.length });
+    
+    const sheetName = datePrefix + '_' + productName;
     
     // 기존 시트 삭제
     let sheet = spreadsheet.getSheetByName(sheetName);
     if (sheet) {
+      console.log('Deleting existing sheet:', sheetName);
       spreadsheet.deleteSheet(sheet);
     }
     
-    // 새 시트 생성
-    sheet = spreadsheet.insertSheet(sheetName);
-    
-    // 헤더 입력
-    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    // 템플릿 시트 복사 또는 새 시트 생성
+    const templateSheet = spreadsheet.getSheetByName(CONFIG.MANUAL_TEMPLATE_SHEET_NAME);
+    if (templateSheet) {
+      console.log('Using template sheet:', CONFIG.MANUAL_TEMPLATE_SHEET_NAME);
+      sheet = templateSheet.copyTo(spreadsheet);
+      sheet.setName(sheetName);
+      
+      // 기존 데이터 삭제 (헤더 제외)
+      const lastRow = sheet.getLastRow();
+      if (lastRow > 1) {
+        console.log('Clearing existing data from row 2 to', lastRow);
+        sheet.deleteRows(2, lastRow - 1);
+      }
+    } else {
+      console.log('Template sheet not found, creating new sheet');
+      sheet = spreadsheet.insertSheet(sheetName);
+      
+      // 헤더 설정
+      sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+      
+      // 기본 서식 설정
+      sheet.getRange(1, 1, 1, headers.length)
+        .setBackground('#4285f4')
+        .setFontColor('#ffffff')
+        .setFontWeight('bold');
+    }
     
     // 데이터 입력
     if (rows.length > 0) {
-      sheet.getRange(2, 1, rows.length, rows[0].length).setValues(rows);
+      console.log('Adding', rows.length, 'rows of data');
+      const dataRange = sheet.getRange(2, 1, rows.length, rows[0].length);
+      dataRange.setValues(rows);
+      
+      // 숫자 열들 오른쪽 정렬 (템플릿 사용 시에도 적용)
+      this.applyNumberFormatting(sheet, rows.length);
     }
     
-    // 서식 설정
-    sheet.getRange(1, 1, 1, headers.length)
-      .setBackground('#f0f0f0')
-      .setFontWeight('bold');
-    
+    // 열 크기 자동 조정
     sheet.autoResizeColumns(1, headers.length);
     
+    console.log('=== Product Sheet Creation Complete ===');
     return sheetName;
+  },
+  
+  /**
+   * 숫자 데이터 오른쪽 정렬 및 H열 전화번호 복사
+   */
+  applyNumberFormatting: function(sheet, rowCount) {
+    console.log('=== Number Formatting & Phone Copy Start ===');
+    console.log('Sheet:', sheet.getName(), 'Rows:', rowCount);
+    
+    if (rowCount === 0) return;
+    
+    try {
+      // H열 "받으시는 분 전화"에 J열 "받는분핸드폰" 데이터 복사
+      const jColumnData = sheet.getRange(2, 10, rowCount, 1).getValues(); // J열 데이터 읽기
+      sheet.getRange(2, 8, rowCount, 1).setValues(jColumnData); // H열에 복사
+      console.log('Copied phone data from column J to column H (받으시는 분 전화)');
+      
+      // B열: 보내시는 분 전화
+      const phoneRange = sheet.getRange(2, 2, rowCount, 1);
+      phoneRange.setHorizontalAlignment('right');
+      console.log('Applied right alignment to column B (보내시는 분 전화)');
+      
+      // H열: 받으시는 분 전화 (복사된 데이터)
+      const receiverPhoneRange = sheet.getRange(2, 8, rowCount, 1);
+      receiverPhoneRange.setHorizontalAlignment('right');
+      console.log('Applied right alignment to column H (받으시는 분 전화)');
+      
+      // J열: 받는분핸드폰
+      const cellRange = sheet.getRange(2, 10, rowCount, 1);
+      cellRange.setHorizontalAlignment('right');
+      console.log('Applied right alignment to column J (받는분핸드폰)');
+      
+      // K열: 받는분우편번호
+      const postalRange = sheet.getRange(2, 11, rowCount, 1);
+      postalRange.setHorizontalAlignment('right');
+      console.log('Applied right alignment to column K (받는분우편번호)');
+      
+      // M열: 수량
+      const quantityRange = sheet.getRange(2, 13, rowCount, 1);
+      quantityRange.setHorizontalAlignment('right');
+      quantityRange.setNumberFormat('#,##0'); // 천 단위 구분자 적용
+      console.log('Applied right alignment and number format to column M (수량)');
+      
+      console.log('=== Number Formatting & Phone Copy Complete ===');
+    } catch (error) {
+      console.error('Formatting and phone copy failed:', error);
+    }
   }
 };

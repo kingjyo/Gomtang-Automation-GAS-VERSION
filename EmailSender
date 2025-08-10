@@ -1,0 +1,248 @@
+/**
+ * 이메일 전용 전송기
+ * EmailSender.gs
+ */
+
+const EmailSender = {
+  /**
+   * 엑셀 파일에서 출고 데이터를 추출하고 이메일 전송
+   */
+  processExcelAndSendEmail: function(fileData, fileName, targetDate) {
+    console.log('=== 엑셀 파일 처리 및 이메일 전송 시작 ===');
+    console.log('Parameters:', { fileName, targetDate });
+    
+    try {
+      // 설정 초기화
+      initializeConfig();
+      
+      // Base64 디코딩
+      const blob = Utilities.newBlob(
+        Utilities.base64Decode(fileData), 
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 
+        fileName
+      );
+      
+      // 임시 파일로 저장
+      const tempFile = DriveApp.createFile(blob);
+      tempFile.setName('temp_email_' + fileName);
+      
+      // 날짜 처리
+      let dateString;
+      if (targetDate) {
+        if (targetDate.length === 4) {
+          // MMDD 형식을 YYYYMMDD로 변환
+          const currentYear = new Date().getFullYear();
+          const month = targetDate.substring(0, 2);
+          const day = targetDate.substring(2, 4);
+          dateString = currentYear + month + day;
+        } else {
+          // YYYYMMDD 형식
+          dateString = targetDate.replace(/\//g, '').replace(/-/g, '');
+        }
+      } else {
+        dateString = getTodayDate();
+      }
+      
+      console.log('Target date:', dateString);
+      
+      // 엑셀 파일을 Google Sheets로 변환
+      const resource = {
+        title: `temp_email_${dateString}`,
+        mimeType: MimeType.GOOGLE_SHEETS
+      };
+      
+      const fileId = tempFile.getId();
+      const convertedFile = Drive.Files.copy(resource, fileId);
+      
+      // 임시 파일 삭제
+      DriveApp.getFileById(fileId).setTrashed(true);
+      
+      // 변환된 스프레드시트 열기
+      const sourceSpreadsheet = SpreadsheetApp.openById(convertedFile.id);
+      console.log('Available sheets:', sourceSpreadsheet.getSheets().map(s => s.getName()));
+      
+      // 출고 데이터 수집
+      const shipmentData = this.extractShipmentDataFromExcel(sourceSpreadsheet, dateString);
+      
+      // 변환된 파일 정리
+      DriveApp.getFileById(convertedFile.id).setTrashed(true);
+      
+      if (!shipmentData.success) {
+        return shipmentData;
+      }
+      
+      // 이메일 수신자 목록 가져오기
+      const recipientsResult = ProductDownloader.getEmailRecipients();
+      if (!recipientsResult.success) {
+        return recipientsResult;
+      }
+      
+      if (recipientsResult.recipients.length === 0) {
+        return {
+          success: false,
+          error: '전송 대상자가 없습니다. 이메일_설정 시트에서 전송여부를 체크해주세요.'
+        };
+      }
+      
+      // 이메일 내용 생성
+      const emailContent = ProductDownloader.generateEmailContent(shipmentData.data, dateString);
+      
+      // 원본 엑셀 파일을 다시 생성 (첨부용)
+      const excelBlob = Utilities.newBlob(
+        Utilities.base64Decode(fileData), 
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 
+        this.generateEmailFileName(dateString)
+      );
+      
+      // 이메일 전송
+      const subject = `${dateString.substring(2,4)}.${dateString.substring(4,6)} 간편식 출고요청`;
+      const recipients = recipientsResult.recipients.map(r => r.email).join(',');
+      
+      GmailApp.sendEmail(
+        recipients,
+        subject,
+        emailContent,
+        {
+          attachments: [excelBlob],
+          name: '한국공항 김영준'
+        }
+      );
+      
+      console.log('=== 이메일 전송 완료 ===');
+      return {
+        success: true,
+        message: `이메일이 성공적으로 전송되었습니다.\n받는 사람: ${recipientsResult.recipients.length}명\n파일명: ${this.generateEmailFileName(dateString)}`,
+        recipientCount: recipientsResult.recipients.length,
+        recipients: recipientsResult.recipients,
+        shipmentSummary: shipmentData.data,
+        fileName: this.generateEmailFileName(dateString)
+      };
+      
+    } catch (error) {
+      console.error('엑셀 파일 처리 및 이메일 전송 실패:', error);
+      return {
+        success: false,
+        error: '처리 실패: ' + error.toString()
+      };
+    }
+  },
+
+  /**
+   * 엑셀 파일에서 출고 데이터 추출
+   */
+  extractShipmentDataFromExcel: function(sourceSpreadsheet, dateString) {
+    console.log(`=== 엑셀 파일에서 출고 데이터 추출: ${dateString} ===`);
+    
+    try {
+      const shipmentData = {
+        '사골고기곰탕5개입': { cybersky: 0, coupang: 0, total: 0 },
+        '사골곰탕20개입': { cybersky: 0, coupang: 0, total: 0 },
+        '사골곰탕10개입': { cybersky: 0, coupang: 0, total: 0 },
+        '육포5개입': { cybersky: 0, coupang: 0, total: 0 }
+      };
+      
+      const sheets = sourceSpreadsheet.getSheets();
+      let processedSheets = 0;
+      
+      // 모든 시트를 검사해서 데이터 추출
+      for (const sheet of sheets) {
+        const sheetName = sheet.getName();
+        console.log(`Processing sheet: ${sheetName}`);
+        
+        const data = sheet.getDataRange().getValues();
+        if (data.length <= 1) continue; // 헤더만 있거나 빈 시트 건너뛰기
+        
+        // 헤더 행 제외하고 처리
+        for (let i = 1; i < data.length; i++) {
+          const row = data[i];
+          
+          // 데이터가 있는 행인지 확인
+          if (!row || row.length < 3) continue;
+          
+          const productName = String(row[1] || ''); // B열: 상품명 (일반적인 위치)
+          const quantity = parseInt(row[2] || 0); // C열: 수량 (일반적인 위치)
+          const memo = String(row[18] || ''); // S열: 메모1 (쿠팡 표시)
+          
+          if (quantity > 0 && productName) {
+            // 제품명 정규화 (새로운 분류 기준)
+            let normalizedProduct = '';
+            if (productName.includes('사골고기곰탕') && productName.includes('5개입')) {
+              normalizedProduct = '사골고기곰탕5개입';
+            } else if (productName.includes('사골곰탕') && productName.includes('20개입')) {
+              normalizedProduct = '사골곰탕20개입';
+            } else if (productName.includes('사골곰탕') && productName.includes('10개입')) {
+              normalizedProduct = '사골곰탕10개입';
+            } else if (productName.includes('육포') && productName.includes('5개입')) {
+              normalizedProduct = '육포5개입';
+            }
+            // 5개입이 명시되지 않은 사골고기곰탕은 기본적으로 5개입으로 처리
+            else if (productName.includes('사골고기곰탕')) {
+              normalizedProduct = '사골고기곰탕5개입';
+            }
+            // 개입이 명시되지 않은 육포는 기본적으로 5개입으로 처리
+            else if (productName.includes('육포')) {
+              normalizedProduct = '육포5개입';
+            }
+            
+            if (normalizedProduct && shipmentData[normalizedProduct]) {
+              if (memo.trim() === '쿠팡') {
+                shipmentData[normalizedProduct].coupang += quantity;
+              } else {
+                shipmentData[normalizedProduct].cybersky += quantity;
+              }
+              shipmentData[normalizedProduct].total += quantity;
+              processedSheets++;
+            }
+          }
+        }
+      }
+      
+      console.log('Shipment data extracted:', shipmentData);
+      console.log(`Processed ${processedSheets} data entries from Excel file`);
+      
+      return {
+        success: true,
+        data: shipmentData
+      };
+      
+    } catch (error) {
+      console.error('엑셀 출고 데이터 추출 실패:', error);
+      return {
+        success: false,
+        error: error.toString()
+      };
+    }
+  },
+
+  /**
+   * 이메일용 파일명 생성
+   */
+  generateEmailFileName: function(dateString) {
+    const month = dateString.substring(4, 6);
+    const day = dateString.substring(6, 8);
+    return `간편식 수기송장 (${month}.${day}).xlsx`;
+  }
+};
+
+/**
+ * HTML에서 호출할 전역 함수들 (EmailSenderDialog용)
+ */
+
+// 엑셀 파일 처리 및 이메일 전송
+function processExcelAndSendEmail(fileData, fileName, targetDate) {
+  console.log('=== Global Function Start: processExcelAndSendEmail ===');
+  console.log('Parameters:', { fileName, targetDate });
+  
+  try {
+    const result = EmailSender.processExcelAndSendEmail(fileData, fileName, targetDate);
+    console.log('Process and send result:', result);
+    console.log('=== Global Function End: processExcelAndSendEmail SUCCESS ===');
+    return result;
+    
+  } catch (error) {
+    console.error('ERROR in global processExcelAndSendEmail:', error.toString());
+    console.error('Error stack:', error.stack);
+    console.log('=== Global Function End: processExcelAndSendEmail FAILED ===');
+    return { success: false, error: error.toString() };
+  }
+}

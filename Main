@@ -38,7 +38,9 @@ function onOpen() {
     .addItem('📊 품목별 시트 분리', 'splitByProduct')
     .addSeparator()
     .addItem('🛍️ 쿠팡 데이터 업로더 열기', 'openCoupangUploader')
-    .addItem('📤 수동 데이터 업로더 열기', 'openManualUploader')
+    .addItem('📥 품목별 다운로더 열기', 'openProductDownloader')
+    .addItem('📤 로컬 엑셀 업로더 열기', 'openLocalExcelUploader')
+    .addItem('📧 이메일 전송기 열기', 'openEmailSender')
     .addItem('📁 드라이브로 초기 설정', 'openGooglePicker')
     .addSeparator()
     .addItem('⏰ 자동 실행 설정', 'setupTriggers')
@@ -309,14 +311,36 @@ function openCoupangUploader() {
 }
 
 /**
- * 수동 데이터 업로더 열기
+ * 로컬 엑셀 업로더 열기
  */
-function openManualUploader() {
-  const html = HtmlService.createHtmlOutputFromFile('ManualUploader')
+function openLocalExcelUploader() {
+  const html = HtmlService.createHtmlOutputFromFile('ExcelUploaderDialog')
     .setWidth(950)
     .setHeight(700)
-    .setTitle('수동 데이터 업로더');
-  SpreadsheetApp.getUi().showModalDialog(html, '수동 데이터 업로더');
+    .setTitle('로컬 엑셀 업로더');
+  SpreadsheetApp.getUi().showModalDialog(html, '로컬 엑셀 업로더');
+}
+
+/**
+ * 품목별 다운로더 열기
+ */
+function openProductDownloader() {
+  const html = HtmlService.createHtmlOutputFromFile('ProductDownloaderDialog')
+    .setWidth(850)
+    .setHeight(650)
+    .setTitle('품목별 다운로더');
+  SpreadsheetApp.getUi().showModalDialog(html, '품목별 다운로더');
+}
+
+/**
+ * 이메일 전송기 열기
+ */
+function openEmailSender() {
+  const html = HtmlService.createHtmlOutputFromFile('EmailSenderDialog')
+    .setWidth(750)
+    .setHeight(700)
+    .setTitle('이메일 전송기');
+  SpreadsheetApp.getUi().showModalDialog(html, '이메일 전송기');
 }
 
 /**

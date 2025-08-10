@@ -1,14 +1,17 @@
 /**
- * 수동 업로드 처리 - 싸이버스카이 및 EDI 데이터
- * ManualUploader.gs
+ * 로컬 엑셀 업로드 처리 - 싸이버스카이 및 EDI 데이터
+ * LocalExcelUploader.gs
  */
 
-const ManualUploader = {
+const LocalExcelUploader = {
   /**
    * A시트(싸이버스카이) 엑셀 파일 처리
    */
-  processASheetFile: function(fileData, fileName) {
+  processASheetFile: function(fileData, fileName, targetDate) {
     try {
+      console.log('=== A시트 처리 시작 ===');
+      console.log('Parameters:', { fileName, targetDate });
+      
       // 설정 초기화
       initializeConfig();
       
@@ -23,9 +26,27 @@ const ManualUploader = {
       const tempFile = DriveApp.createFile(blob);
       tempFile.setName('temp_a_' + fileName);
       
-      // Google Sheets로 변환
-      const todayFull = getTodayDate();
-      const todayShort = getTodayShortDate();
+      // 날짜 처리
+      let todayFull, todayShort;
+      if (targetDate) {
+        if (targetDate.length === 4) {
+          // MMDD 형식 직접 입력
+          todayShort = targetDate;
+          const currentYear = new Date().getFullYear();
+          const month = targetDate.substring(0, 2);
+          const day = targetDate.substring(2, 4);
+          todayFull = currentYear + month + day;
+        } else {
+          // YYYYMMDD 형식
+          todayFull = targetDate.replace(/\//g, '').replace(/-/g, '');
+          todayShort = todayFull.substring(4, 6) + todayFull.substring(6, 8); // MMDD
+        }
+      } else {
+        todayFull = getTodayDate();
+        todayShort = getTodayShortDate();
+      }
+      
+      console.log('Target date:', { todayFull, todayShort });
       const targetFileName = todayFull + '_간편식_싸이버스카이';
       
       const resource = {
@@ -41,14 +62,38 @@ const ManualUploader = {
       
       // 변환된 스프레드시트 열기
       const sourceSpreadsheet = SpreadsheetApp.openById(convertedFile.id);
+      console.log('Available sheets:', sourceSpreadsheet.getSheets().map(s => s.getName()));
       
-      // YYDD 형식의 시트 찾기 (예: 0809)
+      // MMDD 형식의 시트 찾기 (예: 0809)
       let sourceSheet = sourceSpreadsheet.getSheetByName(todayShort);
       
       if (!sourceSheet) {
-        // 시트를 찾지 못하면 첫 번째 시트 사용
-        sourceSheet = sourceSpreadsheet.getSheets()[0];
-        console.log(`${todayShort} 시트를 찾을 수 없어 첫 번째 시트를 사용합니다.`);
+        // MMDD 형식을 찾지 못하면 다른 형식들 시도
+        const sheets = sourceSpreadsheet.getSheets();
+        
+        // 가능한 형식들 시도: MMDD, MM/DD, M/D 등
+        const possibleNames = [
+          todayShort, // 0809
+          `${todayShort.substring(0,2)}/${todayShort.substring(2,4)}`, // 08/09
+          `${parseInt(todayShort.substring(0,2))}/${parseInt(todayShort.substring(2,4))}`, // 8/9
+          `${parseInt(todayShort.substring(0,2))}.${parseInt(todayShort.substring(2,4))}`, // 8.9
+        ];
+        
+        console.log('Searching for sheet names:', possibleNames);
+        
+        for (const name of possibleNames) {
+          sourceSheet = sourceSpreadsheet.getSheetByName(name);
+          if (sourceSheet) {
+            console.log('Found sheet:', name);
+            break;
+          }
+        }
+        
+        // 여전히 찾지 못하면 사용자에게 알림
+        if (!sourceSheet) {
+          const availableSheets = sheets.map(s => s.getName()).join(', ');
+          throw new Error(`${todayShort} 형식의 시트를 찾을 수 없습니다.\n사용 가능한 시트: ${availableSheets}\n올바른 날짜를 지정했는지 확인해주세요.`);
+        }
       }
       
       // 데이터 읽기
@@ -92,8 +137,11 @@ const ManualUploader = {
   /**
    * B시트(EDI) 엑셀 파일 처리
    */
-  processBSheetFile: function(fileData, fileName) {
+  processBSheetFile: function(fileData, fileName, targetDate) {
     try {
+      console.log('=== B시트 처리 시작 ===');
+      console.log('Parameters:', { fileName, targetDate });
+      
       // 설정 초기화
       initializeConfig();
       
@@ -108,8 +156,24 @@ const ManualUploader = {
       const tempFile = DriveApp.createFile(blob);
       tempFile.setName('temp_b_' + fileName);
       
-      // Google Sheets로 변환
-      const todayFull = getTodayDate();
+      // 날짜 처리
+      let todayFull;
+      if (targetDate) {
+        if (targetDate.length === 4) {
+          // MMDD 형식 직접 입력
+          const currentYear = new Date().getFullYear();
+          const month = targetDate.substring(0, 2);
+          const day = targetDate.substring(2, 4);
+          todayFull = currentYear + month + day;
+        } else {
+          // YYYYMMDD 형식
+          todayFull = targetDate.replace(/\//g, '').replace(/-/g, '');
+        }
+      } else {
+        todayFull = getTodayDate();
+      }
+      
+      console.log('Target date:', todayFull);
       const targetFileName = todayFull + '_간편식_EDI';
       
       const resource = {
@@ -171,43 +235,40 @@ const ManualUploader = {
   },
   
   /**
-   * A시트와 B시트 모두 업로드 후 자동 처리
+   * A시트와 B시트 모두 업로드 (데이터 처리 없음)
    */
-  processBothFiles: function(aFileData, aFileName, bFileData, bFileName) {
+  processBothFiles: function(aFileData, aFileName, bFileData, bFileName, targetDate) {
     try {
+      console.log('=== 동시 업로드 시작 ===');
+      console.log('Parameters:', { aFileName, bFileName, targetDate });
+      
       // A시트 처리
-      const aResult = this.processASheetFile(aFileData, aFileName);
+      console.log('A시트 처리 중...');
+      const aResult = this.processASheetFile(aFileData, aFileName, targetDate);
       if (!aResult.success) {
+        console.log('A시트 처리 실패');
         return aResult;
       }
       
       // B시트 처리
-      const bResult = this.processBSheetFile(bFileData, bFileName);
+      console.log('B시트 처리 중...');
+      const bResult = this.processBSheetFile(bFileData, bFileName, targetDate);
       if (!bResult.success) {
+        console.log('B시트 처리 실패');
         return bResult;
       }
       
-      // 데이터 처리 실행
-      const processResult = DataProcessor.processData();
-      if (!processResult.success) {
-        return {
-          success: false,
-          error: '데이터 처리 실패: ' + processResult.error
-        };
-      }
-      
-      // 검산 실행
-      const verifyResult = Verification.runVerification();
-      
+      console.log('=== 동시 업로드 완료 ===');
       return {
         success: true,
-        message: `✅ 모든 처리 완료!\n\nA시트: ${aResult.rowCount}행\nB시트: ${bResult.rowCount}행\n처리된 데이터: ${processResult.processedRows}행\n검산: ${verifyResult.success ? '성공' : '실패'}`
+        message: `✅ 업로드 완료!\n\nA시트: ${aResult.rowCount}행\nB시트: ${bResult.rowCount}행\n\n데이터 처리는 별도로 실행해주세요.`
       };
       
     } catch (error) {
+      console.error('동시 업로드 실패:', error);
       return {
         success: false,
-        error: '통합 처리 실패: ' + error.toString()
+        error: '업로드 실패: ' + error.toString()
       };
     }
   },
@@ -285,7 +346,7 @@ const ManualUploader = {
           if (name.includes('_간편식_EDI') && !bSheet) {
             bSheet = sheet;
           }
-          if (name.includes(' 간편식 수기송장') && !cSheet) {
+          if ((name.includes('_간편식_수기송장') || name.includes(' 간편식 수기송장')) && !cSheet) {
             cSheet = sheet;
           }
         }
@@ -310,3 +371,88 @@ const ManualUploader = {
     }
   }
 };
+
+/**
+ * HTML에서 호출할 전역 함수들 (ExcelUploaderDialog용)
+ */
+
+// 테스트용 함수 (연결 확인)
+function testConnection() {
+  console.log('=== Test Connection: SUCCESS ===');
+  return { success: true, message: '연결 테스트 성공!' };
+}
+function processASheetFile(fileData, fileName, targetDate) {
+  console.log('=== Global Function Start: processASheetFile ===');
+  console.log('Parameters:', { fileName, targetDate });
+  
+  try {
+    const result = LocalExcelUploader.processASheetFile(fileData, fileName, targetDate);
+    console.log('Processing result:', result);
+    console.log('=== Global Function End: processASheetFile SUCCESS ===');
+    return result;
+    
+  } catch (error) {
+    console.error('ERROR in global processASheetFile:', error.toString());
+    console.error('Error stack:', error.stack);
+    console.log('=== Global Function End: processASheetFile FAILED ===');
+    return { success: false, error: error.toString() };
+  }
+}
+
+function processBSheetFile(fileData, fileName, targetDate) {
+  console.log('=== Global Function Start: processBSheetFile ===');
+  console.log('Parameters:', { fileName, targetDate });
+  
+  try {
+    const result = LocalExcelUploader.processBSheetFile(fileData, fileName, targetDate);
+    console.log('Processing result:', result);
+    console.log('=== Global Function End: processBSheetFile SUCCESS ===');
+    return result;
+    
+  } catch (error) {
+    console.error('ERROR in global processBSheetFile:', error.toString());
+    console.error('Error stack:', error.stack);
+    console.log('=== Global Function End: processBSheetFile FAILED ===');
+    return { success: false, error: error.toString() };
+  }
+}
+
+function processBothFiles(aFileData, aFileName, bFileData, bFileName, targetDate) {
+  console.log('=== Global Function Start: processBothFiles ===');
+  console.log('Parameters:', { aFileName, bFileName, targetDate });
+  
+  try {
+    const result = LocalExcelUploader.processBothFiles(aFileData, aFileName, bFileData, bFileName, targetDate);
+    console.log('Processing result:', result);
+    console.log('=== Global Function End: processBothFiles SUCCESS ===');
+    return result;
+    
+  } catch (error) {
+    console.error('ERROR in global processBothFiles:', error.toString());
+    console.error('Error stack:', error.stack);
+    console.log('=== Global Function End: processBothFiles FAILED ===');
+    return { success: false, error: error.toString() };
+  }
+}
+
+function checkUploadStatus() {
+  console.log('=== Global Function Start: checkUploadStatus ===');
+  
+  try {
+    const result = LocalExcelUploader.checkUploadStatus();
+    console.log('Status result:', result);
+    console.log('=== Global Function End: checkUploadStatus SUCCESS ===');
+    return result;
+    
+  } catch (error) {
+    console.error('ERROR in global checkUploadStatus:', error.toString());
+    console.error('Error stack:', error.stack);
+    console.log('=== Global Function End: checkUploadStatus FAILED ===');
+    return { 
+      aSheet: false,
+      bSheet: false,
+      cSheet: false,
+      error: error.toString()
+    };
+  }
+}

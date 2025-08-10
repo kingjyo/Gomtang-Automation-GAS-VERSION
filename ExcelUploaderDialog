@@ -83,6 +83,78 @@
       padding: 30px;
     }
     
+    /* 날짜 선택 섹션 */
+    .date-section {
+      margin-bottom: 25px;
+      padding: 20px;
+      border: 2px solid #e9ecef;
+      border-radius: 10px;
+      background: #f8f9fa;
+    }
+    
+    .date-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 15px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .date-input-group {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    
+    .date-input {
+      padding: 10px 15px;
+      border: 2px solid #dee2e6;
+      border-radius: 8px;
+      font-size: 14px;
+      width: 120px;
+      text-align: center;
+      font-weight: 500;
+      transition: all 0.3s ease;
+    }
+    
+    .date-input:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+    
+    .date-input::placeholder {
+      color: #999;
+      font-weight: 400;
+    }
+    
+    .date-today-btn {
+      padding: 10px 15px;
+      border: none;
+      border-radius: 8px;
+      background: #28a745;
+      color: white;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      white-space: nowrap;
+    }
+    
+    .date-today-btn:hover {
+      background: #218838;
+      transform: translateY(-1px);
+    }
+    
+    .date-help {
+      font-size: 12px;
+      color: #666;
+      margin-left: 10px;
+      line-height: 1.4;
+    }
+    
     .upload-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -364,7 +436,7 @@
 <body>
   <div class="container">
     <div class="header">
-      <h1>📤 수동 데이터 업로더</h1>
+      <h1>📤 로컬 엑셀 업로더</h1>
       <p>싸이버스카이 및 EDI 데이터를 직접 업로드합니다</p>
     </div>
     
@@ -384,6 +456,21 @@
     </div>
     
     <div class="content">
+      <!-- 날짜 선택 섹션 -->
+      <div class="date-section">
+        <div class="date-title">
+          📅 처리할 날짜 지정
+        </div>
+        <div class="date-input-group">
+          <input type="text" id="dateInput" class="date-input" placeholder="0809" maxlength="4" pattern="[0-9]{4}">
+          <button class="date-today-btn" onclick="setTodayDate()">📅 오늘</button>
+          <div class="date-help">
+            MMDD 형식 (예: 0809)<br>
+            엑셀 시트의 탭 이름과 일치해야 합니다
+          </div>
+        </div>
+      </div>
+      
       <div class="upload-grid">
         <!-- A시트 업로드 박스 -->
         <div class="upload-box a-sheet" id="aSheetBox">
@@ -449,6 +536,34 @@
     let aSheetFile = null;
     let bSheetFile = null;
     
+    // 날짜 관련 함수들
+    function setTodayDate() {
+      const today = new Date();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      const mmdd = month + day;
+      
+      document.getElementById('dateInput').value = mmdd;
+    }
+    
+    function getSelectedDate() {
+      const dateInput = document.getElementById('dateInput').value.trim();
+      
+      // 입력값 검증
+      if (dateInput && dateInput.length === 4 && /^\d{4}$/.test(dateInput)) {
+        return dateInput;
+      } else if (dateInput && dateInput.length > 0) {
+        showMessage('날짜는 MMDD 형식 4자리 숫자로 입력해주세요 (예: 0809)', 'error');
+        return null;
+      }
+      
+      // 입력값이 없으면 오늘 날짜 사용
+      const today = new Date();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      return month + day;
+    }
+    
     // 페이지 로드 시 상태 확인
     window.onload = function() {
       checkStatus();
@@ -456,14 +571,36 @@
     
     // 상태 확인
     function checkStatus() {
+      console.log('Attempting to check upload status...');
       google.script.run
         .withSuccessHandler(function(status) {
+          console.log('Status check success:', status);
           updateStatusIndicators(status);
         })
         .withFailureHandler(function(error) {
           console.error('상태 확인 실패:', error);
+          // 연결 테스트 시도
+          testConnection();
         })
-        .ManualUploader.checkUploadStatus();
+        .checkUploadStatus();
+    }
+    
+    // 연결 테스트 함수
+    function testConnection() {
+      console.log('Testing backend connection...');
+      google.script.run
+        .withSuccessHandler(function(result) {
+          console.log('Connection test result:', result);
+          if (result.success) {
+            console.log('Backend connection successful');
+          }
+        })
+        .withFailureHandler(function(error) {
+          console.error('Connection test failed:', error);
+          // 사용자에게 오류 표시
+          showMessage('백엔드 연결 실패. 스크립트 파일이 제대로 로드되지 않았을 수 있습니다.', 'error');
+        })
+        .testConnection();
     }
     
     // 상태 표시 업데이트
@@ -590,6 +727,12 @@
         return;
       }
       
+      // 날짜 선택
+      const targetDate = getSelectedDate();
+      if (targetDate === null) {
+        return; // 날짜 입력 오류
+      }
+      
       showLoading(`${name} 업로드 중...`);
       showProgress(0);
       
@@ -602,28 +745,54 @@
         
         const functionName = type === 'a' ? 'processASheetFile' : 'processBSheetFile';
         
-        google.script.run
-          .withSuccessHandler(function(result) {
-            hideLoading();
-            hideProgress();
-            
-            if (result.success) {
-              showMessage(result.message, 'success');
-              checkStatus();
+        // 동적 함수 호출
+        if (functionName === 'processASheetFile') {
+          google.script.run
+            .withSuccessHandler(function(result) {
+              hideLoading();
+              hideProgress();
               
-              // 파일 초기화
-              removeFile(type);
-            } else {
-              showMessage(result.error, 'error');
-            }
-            animateProgress(100, 200);
-          })
-          .withFailureHandler(function(error) {
-            hideLoading();
-            hideProgress();
-            showMessage(`업로드 실패: ${error}`, 'error');
-          })
-          .ManualUploader[functionName](fileData, file.name);
+              if (result.success) {
+                showMessage(result.message, 'success');
+                checkStatus();
+                
+                // 파일 초기화
+                removeFile(type);
+              } else {
+                showMessage(result.error, 'error');
+              }
+              animateProgress(100, 200);
+            })
+            .withFailureHandler(function(error) {
+              hideLoading();
+              hideProgress();
+              showMessage(`업로드 실패: ${error}`, 'error');
+            })
+            .processASheetFile(fileData, file.name, targetDate);
+        } else {
+          google.script.run
+            .withSuccessHandler(function(result) {
+              hideLoading();
+              hideProgress();
+              
+              if (result.success) {
+                showMessage(result.message, 'success');
+                checkStatus();
+                
+                // 파일 초기화
+                removeFile(type);
+              } else {
+                showMessage(result.error, 'error');
+              }
+              animateProgress(100, 200);
+            })
+            .withFailureHandler(function(error) {
+              hideLoading();
+              hideProgress();
+              showMessage(`업로드 실패: ${error}`, 'error');
+            })
+            .processBSheetFile(fileData, file.name, targetDate);
+        }
       };
       
       reader.readAsDataURL(file);
@@ -633,6 +802,12 @@
       if (!aSheetFile || !bSheetFile) {
         showMessage('A시트와 B시트 파일을 모두 선택해주세요.', 'error');
         return;
+      }
+      
+      // 날짜 선택
+      const targetDate = getSelectedDate();
+      if (targetDate === null) {
+        return; // 날짜 입력 오류
       }
       
       showLoading('파일 읽는 중...');
@@ -675,7 +850,7 @@
               hideProgress();
               showMessage(`처리 실패: ${error}`, 'error');
             })
-            .ManualUploader.processBothFiles(aFileData, aSheetFile.name, bFileData, bSheetFile.name);
+            .processBothFiles(aFileData, aSheetFile.name, bFileData, bSheetFile.name, targetDate);
         };
         
         readerB.readAsDataURL(bSheetFile);
@@ -702,7 +877,7 @@
           hideLoading();
           showMessage(`처리 실패: ${error}`, 'error');
         })
-        .DataProcessor.processData();
+        .runDataProcessor();
     }
     
     function showLoading(text) {

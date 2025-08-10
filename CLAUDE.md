@@ -93,7 +93,7 @@ The system handles three main product families:
 
 ## Google APIs Used
 - SpreadsheetApp: Core spreadsheet operations
-- DriveApp / Drive API v2: File management and archival
+- DriveApp / Drive API v3: File management and archival
 - GmailApp: EDI attachment extraction
 - HtmlService: Web UI for manual uploads
 - PropertiesService: Configuration persistence
@@ -147,17 +147,21 @@ function exampleFunction(param1, param2) {
 - Use structured logging with objects when possible
 - Return consistent `{ success: boolean, data/error }` format
 
-**Task Completion Reporting:**
-Always list modified files at the end of each task for easy copying:
-```
-## Changed Files:
-- GooglePicker.gs: Added Drive API v3 support
-- PickerClient: Enhanced error handling
-- PickerDialog: Updated modal styling
-```
-
 ## Common Issues & Solutions
 1. **EDI Email Not Found**: Check Gmail search query in `EDIData.getEDIFromEmail()`
 2. **Sheet Column Mismatch**: Verify headers in `getSheetAColumnMapping()` and `getSheetBColumnMapping()`
-3. **Drive Permission**: Enable Drive API in Google Cloud Console
+3. **Drive Permission**: Enable Drive API v3 in Google Cloud Console
 4. **Data Discrepancies**: Use `runVerification()` to identify mismatches
+5. **Google Picker Not Working**: Ensure API key and project number are set via `__init_setPickerConfigOnce()`
+
+## Recent Updates (2025-08-09)
+### Enhanced Google Drive File Picker
+- **Recursive Search**: Search now includes all subfolders in current context (root searches entire Drive)
+- **Shared Drives Search**: When in "공유 드라이브" category, searches across ALL shared drives and their contents
+- **New Folder Creation**: Added `createNewFolder()` function with shared drive support
+- **Search Modes**: Added `searchMode` parameter ('recursive' default, 'current' for single folder)
+
+### Key Functions Added
+- `createNewFolder(parentFolderId, folderName)`: Creates folders with proper shared drive handling
+- `searchDriveFiles()`: Enhanced with recursive search and multi-drive support
+- UI: Added "새 폴더" button in picker dialog

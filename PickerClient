@@ -8,6 +8,10 @@
   let isSearchMode = false;
   let currentSearchQuery = '';
   let searchTimeout = null;
+  let currentPageToken = null;
+  let nextPageToken = null;
+  let currentPageNumber = 1;
+  let pageTokenHistory = [null]; // 페이지 토큰 히스토리
 
   const qs = (id) => document.getElementById(id);
 
@@ -59,9 +63,13 @@
     selectionMode = mode;
     const modal = qs('explorerModal');
     const title = qs('explorerTitle');
+    const selectBtn = qs('selectCurrentFolderBtn');
     
     title.textContent = mode === 'spreadsheet' ? '스프레드시트 선택' : '폴더 선택';
     modal.style.display = 'flex';
+    
+    // 폴더 선택 모드에서만 "이 폴더 선택" 버튼 표시
+    selectBtn.style.display = mode === 'folder' ? 'block' : 'none';
     
     // 루트 목록 로드
     loadDriveRoots();
@@ -109,14 +117,22 @@
   }
 
   // 폴더 내용 로드
-  function loadFolderContents(folderId) {
+  function loadFolderContents(folderId, pageToken = null) {
     console.log('=== UI Function Start: loadFolderContents ===');
-    console.log('Parameters:', { folderId, selectionMode });
+    console.log('Parameters:', { folderId, selectionMode, pageToken });
     
     const content = qs('explorerContent');
     const breadcrumb = qs('explorerBreadcrumb');
     
     content.innerHTML = '<div class="loading-text">로딩 중...</div>';
+    
+    // 새 폴더로 이동하는 경우 페이지 상태 초기화
+    if (!pageToken && folderId !== currentFolderId) {
+      currentPageNumber = 1;
+      pageTokenHistory = [null];
+      currentPageToken = null;
+    }
+    
     currentFolderId = folderId;
     
     // 필터 타입 결정
@@ -129,6 +145,10 @@
         if (res && res.success) {
           displayFolderContents(res.items);
           updateBreadcrumb(folderId);
+          
+          // 페이지네이션 업데이트
+          nextPageToken = res.nextPageToken || null;
+          updatePaginationButtons(res.hasMore);
         } else {
           console.error('Invalid folder contents response:', res);
           content.innerHTML = '<div class="error-text">응답 형식 오류</div>';
@@ -138,7 +158,7 @@
         console.error('Folder contents load failed:', err);
         content.innerHTML = '<div class="error-text">로드 실패: ' + err.message + '</div>';
       })
-      .getDriveFolderContents(folderId, filterType);
+      .getDriveFolderContents(folderId, filterType, pageToken);
   }
 
   // 폴더 내용 표시
@@ -155,10 +175,16 @@
       const isSelectable = (selectionMode === 'spreadsheet' && item.mimeType === 'application/vnd.google-apps.spreadsheet') ||
                           (selectionMode === 'folder' && item.type === 'folder');
       
+      // 폴더는 더블클릭으로 진입, 스프레드시트는 단일클릭으로 선택
+      let clickHandler = '';
+      if (item.type === 'folder') {
+        clickHandler = `ondblclick="navigateToFolder('${item.id}', '${item.name}')"`;
+      } else if (isSelectable) {
+        clickHandler = `onclick="selectItem('${item.id}', '${item.name}')"`;
+      }
+      
       html += `
-        <div class="file-item ${isSelectable ? 'selectable' : ''}" 
-             onclick="${item.type === 'folder' ? `navigateToFolder('${item.id}', '${item.name}')` : 
-                       (isSelectable ? `selectItem('${item.id}', '${item.name}')` : 'void(0)')}">
+        <div class="file-item ${isSelectable ? 'selectable' : ''}" ${clickHandler}>
           <div class="file-icon">${item.icon}</div>
           <div class="file-name">${item.name}</div>
         </div>
@@ -211,6 +237,26 @@
     
     closeDriveExplorer();
     updateSaveButton();
+  }
+  
+  // 현재 폴더 선택 (폴더 모드에서만)
+  function selectCurrentFolder() {
+    if (selectionMode !== 'folder') return;
+    
+    // 특수 폴더는 선택 불가
+    if (currentFolderId === 'sharedWithMe' || currentFolderId === 'recent' || currentFolderId === 'sharedDrives') {
+      alert('이 위치는 저장 폴더로 선택할 수 없습니다.');
+      return;
+    }
+    
+    // 현재 경로의 마지막 폴더 이름 가져오기
+    let folderName = '내 드라이브';
+    if (currentPath && currentPath.length > 0) {
+      folderName = currentPath[currentPath.length - 1].name;
+    }
+    
+    // 폴더 선택
+    selectItem(currentFolderId, folderName);
   }
 
   // ===== 저장 =====
@@ -281,15 +327,15 @@
     // 검색 컨텍스트에 따른 breadcrumb 메시지
     let contextMessage = '';
     if (currentFolderId === 'root') {
-      contextMessage = '내 드라이브에서';
+      contextMessage = '내 드라이브 전체에서';
     } else if (currentFolderId === 'sharedWithMe') {
       contextMessage = '공유 문서함에서';
     } else if (currentFolderId === 'sharedDrives') {
-      contextMessage = '공유 드라이브에서';
+      contextMessage = '모든 공유 드라이브에서';
     } else if (currentFolderId === 'recent') {
       contextMessage = '최근 항목에서';
     } else {
-      contextMessage = '현재 폴더에서';
+      contextMessage = '현재 폴더 및 하위 폴더에서';
     }
     
     breadcrumb.innerHTML = `${contextMessage} 검색: "${query}"`;
@@ -324,6 +370,110 @@
     isSearchMode = false;
     currentSearchQuery = '';
     loadFolderContents(currentFolderId);
+  }
+
+  // ===== 새 폴더 만들기 =====
+  function showNewFolderDialog() {
+    // 특수 위치에서는 폴더 생성 불가
+    if (currentFolderId === 'sharedWithMe' || currentFolderId === 'recent') {
+      alert('이 위치에는 폴더를 만들 수 없습니다.');
+      return;
+    }
+    
+    if (currentFolderId === 'sharedDrives') {
+      alert('공유 드라이브 루트에는 폴더를 만들 수 없습니다.\n특정 공유 드라이브를 선택해주세요.');
+      return;
+    }
+    
+    const folderName = prompt('새 폴더 이름을 입력하세요:');
+    
+    if (folderName && folderName.trim()) {
+      createNewFolder(folderName.trim());
+    }
+  }
+  
+  function createNewFolder(folderName) {
+    console.log('=== UI Function Start: createNewFolder ===');
+    console.log('Creating folder:', folderName, 'in:', currentFolderId);
+    
+    const content = qs('explorerContent');
+    const originalContent = content.innerHTML;
+    content.innerHTML = '<div class="loading-text">폴더 생성 중...</div>';
+    
+    google.script.run
+      .withSuccessHandler(function(res) {
+        console.log('Create folder response:', res);
+        if (res && res.success) {
+          // 폴더 생성 성공 - 목록 새로고침
+          loadFolderContents(currentFolderId);
+          
+          // 폴더 모드일 경우 새로 만든 폴더 자동 선택
+          if (selectionMode === 'folder' && res.folder) {
+            setTimeout(() => {
+              selectItem(res.folder.id, res.folder.name);
+            }, 500);
+          }
+        } else {
+          content.innerHTML = originalContent;
+          alert('폴더 생성 실패: ' + (res && res.error ? res.error : '알 수 없는 오류'));
+        }
+      })
+      .withFailureHandler(function(err) {
+        console.error('Create folder error:', err);
+        content.innerHTML = originalContent;
+        alert('폴더 생성 중 오류가 발생했습니다.');
+      })
+      .createNewFolder(currentFolderId, folderName);
+  }
+
+  // ===== 페이지네이션 =====
+  function updatePaginationButtons(hasMore) {
+    const pagination = qs('pagination');
+    const prevBtn = qs('prevPageBtn');
+    const nextBtn = qs('nextPageBtn');
+    const pageInfo = qs('pageInfo');
+    
+    // 페이지네이션 표시/숨김
+    if (currentPageNumber > 1 || hasMore) {
+      pagination.style.display = 'flex';
+    } else {
+      pagination.style.display = 'none';
+    }
+    
+    // 버튼 상태 업데이트
+    prevBtn.disabled = currentPageNumber <= 1;
+    nextBtn.disabled = !hasMore;
+    
+    // 페이지 정보 업데이트
+    pageInfo.textContent = `${currentPageNumber} 페이지`;
+  }
+  
+  function loadNextPage() {
+    if (nextPageToken) {
+      currentPageNumber++;
+      pageTokenHistory.push(nextPageToken);
+      currentPageToken = nextPageToken;
+      
+      if (isSearchMode) {
+        performSearch(currentSearchQuery, nextPageToken);
+      } else {
+        loadFolderContents(currentFolderId, nextPageToken);
+      }
+    }
+  }
+  
+  function loadPreviousPage() {
+    if (currentPageNumber > 1) {
+      currentPageNumber--;
+      pageTokenHistory.pop();
+      currentPageToken = pageTokenHistory[pageTokenHistory.length - 1];
+      
+      if (isSearchMode) {
+        performSearch(currentSearchQuery, currentPageToken);
+      } else {
+        loadFolderContents(currentFolderId, currentPageToken);
+      }
+    }
   }
 
   // ===== 초기화 =====

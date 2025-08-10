@@ -216,11 +216,50 @@ function getSharedDrivesList() {
 }
 
 /**
+ * 파일 확장자에 따른 아이콘 반환
+ */
+function getFileIcon(file) {
+  const mimeType = file.mimeType;
+  const fileName = file.name || '';
+  const extension = fileName.split('.').pop().toLowerCase();
+  
+  // MIME 타입 기반 아이콘
+  if (mimeType === 'application/vnd.google-apps.folder') {
+    return '📁';
+  } else if (mimeType === 'application/vnd.google-apps.spreadsheet' || 
+             extension === 'xls' || extension === 'xlsx' || extension === 'csv') {
+    return '<i class="fa-solid fa-file-excel" style="color: #107C41;"></i>';
+  } else if (mimeType === 'application/vnd.google-apps.document' || 
+             extension === 'doc' || extension === 'docx') {
+    return '<i class="fa-solid fa-file-word" style="color: #2B579A;"></i>';
+  } else if (mimeType === 'application/vnd.google-apps.presentation' || 
+             extension === 'ppt' || extension === 'pptx') {
+    return '<i class="fa-solid fa-file-powerpoint" style="color: #B7472A;"></i>';
+  } else if (extension === 'pdf') {
+    return '<i class="fa-solid fa-file-pdf" style="color: #FF0000;"></i>';
+  } else if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg', 'webp'].includes(extension)) {
+    return '<i class="fa-solid fa-file-image" style="color: #4285F4;"></i>';
+  } else if (['mp4', 'avi', 'mov', 'wmv', 'flv', 'mkv'].includes(extension)) {
+    return '<i class="fa-solid fa-file-video" style="color: #EA4335;"></i>';
+  } else if (['mp3', 'wav', 'flac', 'aac', 'ogg'].includes(extension)) {
+    return '<i class="fa-solid fa-file-audio" style="color: #FBBC04;"></i>';
+  } else if (['zip', 'rar', '7z', 'tar', 'gz'].includes(extension)) {
+    return '<i class="fa-solid fa-file-zipper" style="color: #34A853;"></i>';
+  } else if (['txt', 'md', 'log'].includes(extension)) {
+    return '<i class="fa-solid fa-file-lines" style="color: #5F6368;"></i>';
+  } else if (['js', 'py', 'java', 'cpp', 'c', 'html', 'css', 'json', 'xml'].includes(extension)) {
+    return '<i class="fa-solid fa-file-code" style="color: #673AB7;"></i>';
+  } else {
+    return '<i class="fa-solid fa-file" style="color: #9AA0A6;"></i>';
+  }
+}
+
+/**
  * 폴더 내용 가져오기
  */
-function getDriveFolderContents(folderId, filterType = 'all') {
+function getDriveFolderContents(folderId, filterType = 'all', pageToken = null) {
   console.log('=== Function Start: getDriveFolderContents ===');
-  console.log('Parameters:', { folderId, filterType });
+  console.log('Parameters:', { folderId, filterType, pageToken });
   
   try {
     const items = [];
@@ -260,20 +299,25 @@ function getDriveFolderContents(folderId, filterType = 'all') {
     // 파일 목록 가져오기 - Drive API v3 형식으로 업그레이드
     const requestParams = {
       q: query,
-      pageSize: folderId === 'recent' ? 50 : 100, // v3에서는 pageSize 사용
-      orderBy: folderId === 'recent' ? 'modifiedTime desc' : 'folder,name', // v3에서는 modifiedTime, name 사용
-      fields: 'files(id,name,mimeType,parents,modifiedTime)', // v3에서는 files, name 사용
-      supportsAllDrives: true, // v3에서는 supportsAllDrives 사용
-      includeItemsFromAllDrives: true // v3에서는 includeItemsFromAllDrives 사용
+      pageSize: 50, // 페이지당 50개
+      orderBy: folderId === 'recent' ? 'modifiedTime desc' : 'folder,name',
+      fields: 'nextPageToken,files(id,name,mimeType,parents,modifiedTime)', // nextPageToken 추가
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true
     };
     
-    console.log('Step 3: Making API request with params:', requestParams);
-    const files = Drive.Files.list(requestParams);
-    console.log('API response:', files);
+    // 페이지 토큰이 있으면 추가
+    if (pageToken) {
+      requestParams.pageToken = pageToken;
+    }
     
-    if (files.files && files.files.length > 0) {
-      console.log(`Step 4: Processing ${files.files.length} items`);
-      files.files.forEach(file => {
+    console.log('Step 3: Making API request with params:', requestParams);
+    const response = Drive.Files.list(requestParams);
+    console.log('API response:', response);
+    
+    if (response.files && response.files.length > 0) {
+      console.log(`Step 4: Processing ${response.files.length} items`);
+      response.files.forEach(file => {
         const isFolder = file.mimeType === 'application/vnd.google-apps.folder';
         const isSpreadsheet = file.mimeType === 'application/vnd.google-apps.spreadsheet';
         
@@ -284,11 +328,11 @@ function getDriveFolderContents(folderId, filterType = 'all') {
           
           items.push({
             id: file.id,
-            name: file.name, // v3에서는 name 사용
+            name: file.name,
             type: isFolder ? 'folder' : 'file',
             mimeType: file.mimeType,
-            icon: isFolder ? '📁' : (isSpreadsheet ? '<i class="fa-solid fa-file-excel"></i>' : '📄'),
-            modifiedDate: file.modifiedTime // v3에서는 modifiedTime 사용
+            icon: getFileIcon(file), // 아이콘 함수 사용
+            modifiedDate: file.modifiedTime
           });
         }
       });
@@ -298,7 +342,13 @@ function getDriveFolderContents(folderId, filterType = 'all') {
     
     console.log(`Step 5: Returning ${items.length} filtered items`);
     console.log('=== Function End: getDriveFolderContents SUCCESS ===');
-    return { success: true, items, folderId };
+    return { 
+      success: true, 
+      items, 
+      folderId,
+      nextPageToken: response.nextPageToken || null, // 다음 페이지 토큰
+      hasMore: !!response.nextPageToken // 더 많은 결과가 있는지
+    };
     
   } catch (error) {
     console.error('ERROR in getDriveFolderContents:', error.toString());
@@ -393,9 +443,9 @@ function getDrivePath(folderId) {
 /**
  * 파일/폴더 검색 기능 (현재 폴더 컨텍스트 내에서)
  */
-function searchDriveFiles(query, filterType = 'all', currentFolderId = 'root') {
+function searchDriveFiles(query, filterType = 'all', currentFolderId = 'root', searchMode = 'recursive', pageToken = null) {
   console.log('=== Function Start: searchDriveFiles ===');
-  console.log('Parameters:', { query, filterType, currentFolderId });
+  console.log('Parameters:', { query, filterType, currentFolderId, searchMode });
   
   try {
     if (!query || query.trim() === '') {
@@ -410,7 +460,8 @@ function searchDriveFiles(query, filterType = 'all', currentFolderId = 'root') {
     // 현재 폴더 컨텍스트 추가
     console.log('Step 1: Adding folder context to search');
     if (currentFolderId === 'root') {
-      searchQuery += " and 'root' in parents";
+      // root에서 검색할 때는 parents 조건 없이 전체 검색 (내 드라이브 전체)
+      // searchQuery는 이미 name contains와 trashed = false만 포함
     } else if (currentFolderId === 'sharedWithMe') {
       searchQuery += " and sharedWithMe";
     } else if (currentFolderId === 'recent') {
@@ -420,8 +471,11 @@ function searchDriveFiles(query, filterType = 'all', currentFolderId = 'root') {
       const dateStr = thirtyDaysAgo.toISOString();
       searchQuery += ` and modifiedTime > '${dateStr}'`;
     } else if (currentFolderId !== 'sharedDrives' && currentFolderId !== 'recent') {
-      // 특정 폴더 내 검색
-      searchQuery += ` and '${currentFolderId}' in parents`;
+      // 특정 폴더 내 검색 - searchMode에 따라 재귀/비재귀 결정
+      if (searchMode === 'current') {
+        searchQuery += ` and '${currentFolderId}' in parents`;
+      }
+      // recursive 모드일 때는 parents 조건 없이 전체 검색 (아래에서 필터링)
     }
     // 공유 드라이브 카테고리의 경우 별도 처리
     
@@ -437,10 +491,11 @@ function searchDriveFiles(query, filterType = 'all', currentFolderId = 'root') {
     // 공유 드라이브 카테고리의 경우 별도 처리
     if (currentFolderId === 'sharedDrives') {
       console.log('Step 3: Special handling for shared drives category search');
-      // 모든 공유 드라이브에서 검색
+      // 모든 공유 드라이브와 그 하위 파일들에서 검색
       try {
         const drives = Drive.Drives.list({ pageSize: 100 });
         if (drives.drives && drives.drives.length > 0) {
+          // 1. 먼저 드라이브 이름이 매칭되는지 확인
           for (const drive of drives.drives) {
             if (drive.name.toLowerCase().includes(query.toLowerCase())) {
               items.push({
@@ -449,8 +504,54 @@ function searchDriveFiles(query, filterType = 'all', currentFolderId = 'root') {
                 type: 'folder',
                 mimeType: 'application/vnd.google-apps.folder',
                 icon: '📁',
-                modifiedDate: null
+                modifiedDate: null,
+                isSharedDrive: true
               });
+            }
+          }
+          
+          // 2. 각 공유 드라이브 내부의 모든 파일/폴더에서 검색
+          console.log('Searching within all shared drives...');
+          for (const drive of drives.drives) {
+            try {
+              const driveSearchQuery = `name contains '${query.trim()}' and trashed = false`;
+              const driveSearchParams = {
+                q: driveSearchQuery,
+                pageSize: 20, // 각 드라이브당 최대 20개
+                orderBy: 'name',
+                fields: 'files(id,name,mimeType,parents,modifiedTime)',
+                supportsAllDrives: true,
+                includeItemsFromAllDrives: true,
+                driveId: drive.id,
+                corpora: 'drive'
+              };
+              
+              // 타입 필터 적용
+              if (filterType === 'spreadsheet') {
+                driveSearchParams.q += " and mimeType = 'application/vnd.google-apps.spreadsheet'";
+              } else if (filterType === 'folder') {
+                driveSearchParams.q += " and mimeType = 'application/vnd.google-apps.folder'";
+              }
+              
+              const driveFiles = Drive.Files.list(driveSearchParams);
+              if (driveFiles.files && driveFiles.files.length > 0) {
+                driveFiles.files.forEach(file => {
+                  const isFolder = file.mimeType === 'application/vnd.google-apps.folder';
+                  const isSpreadsheet = file.mimeType === 'application/vnd.google-apps.spreadsheet';
+                  
+                  items.push({
+                    id: file.id,
+                    name: `${file.name} (${drive.name})`, // 드라이브 이름 표시
+                    type: isFolder ? 'folder' : 'file',
+                    mimeType: file.mimeType,
+                    icon: getFileIcon(file), // 아이콘 함수 사용
+                    modifiedDate: file.modifiedTime,
+                    parentDrive: drive.name
+                  });
+                });
+              }
+            } catch (e) {
+              console.log(`Failed to search in drive ${drive.name}:`, e);
             }
           }
         }
@@ -458,7 +559,7 @@ function searchDriveFiles(query, filterType = 'all', currentFolderId = 'root') {
         console.error('Failed to search shared drives:', e);
       }
       
-      console.log(`Step 4: Found ${items.length} matching shared drives`);
+      console.log(`Step 4: Found ${items.length} total results across all shared drives`);
       console.log('=== Function End: searchDriveFiles SUCCESS (shared drives) ===');
       return { success: true, items, query: query.trim(), searchContext: 'sharedDrives' };
     }
@@ -548,6 +649,160 @@ function searchDriveFiles(query, filterType = 'all', currentFolderId = 'root') {
     console.error('ERROR in searchDriveFiles:', error.toString());
     console.error('Error stack:', error.stack);
     console.log('=== Function End: searchDriveFiles FAILED ===');
+    return { success: false, error: error.toString() };
+  }
+}
+
+/**
+ * 새 폴더 만들기 - Drive API v3 사용
+ */
+function createNewFolder(parentFolderId, folderName) {
+  console.log('=== Function Start: createNewFolder ===');
+  console.log('Parameters:', { parentFolderId, folderName });
+  
+  try {
+    if (!folderName || folderName.trim() === '') {
+      console.log('Empty folder name');
+      console.log('=== Function End: createNewFolder FAILED ===');
+      return { success: false, error: '폴더 이름을 입력해주세요.' };
+    }
+    
+    // 특수 위치 체크
+    if (parentFolderId === 'sharedWithMe' || parentFolderId === 'recent') {
+      console.log('Cannot create folder in special location');
+      console.log('=== Function End: createNewFolder FAILED ===');
+      return { success: false, error: '이 위치에는 폴더를 만들 수 없습니다.' };
+    }
+    
+    if (parentFolderId === 'sharedDrives') {
+      console.log('Cannot create folder at shared drives root');
+      console.log('=== Function End: createNewFolder FAILED ===');
+      return { success: false, error: '공유 드라이브 루트에는 폴더를 만들 수 없습니다. 특정 공유 드라이브를 선택해주세요.' };
+    }
+    
+    console.log('Step 1: Preparing folder metadata for Drive API v3');
+    
+    // Drive API v3 메타데이터
+    const folderMetadata = {
+      name: folderName.trim(),  // v3에서는 'name' 사용 (v2의 'title' 대신)
+      mimeType: 'application/vnd.google-apps.folder',
+      parents: [parentFolderId === 'root' ? 'root' : parentFolderId]
+    };
+    
+    console.log('Step 2: Folder metadata:', folderMetadata);
+    
+    // 공유 드라이브 체크
+    let supportsAllDrives = false;
+    if (parentFolderId !== 'root') {
+      try {
+        console.log('Step 3: Checking if parent is in shared drive');
+        
+        // 부모가 공유 드라이브인지 확인
+        try {
+          const drives = Drive.Drives.list({ pageSize: 100 });
+          if (drives.drives && drives.drives.some(drive => drive.id === parentFolderId)) {
+            console.log('Parent is a shared drive');
+            supportsAllDrives = true;
+          } else {
+            // 부모 폴더가 공유 드라이브 내부인지 확인
+            try {
+              const parentInfo = Drive.Files.get(parentFolderId, {
+                supportsAllDrives: true,
+                fields: 'driveId'
+              });
+              if (parentInfo.driveId) {
+                console.log('Parent is in shared drive:', parentInfo.driveId);
+                supportsAllDrives = true;
+              }
+            } catch (e) {
+              console.log('Parent is not in shared drive');
+            }
+          }
+        } catch (e) {
+          console.log('Could not check shared drive status:', e);
+        }
+      } catch (e) {
+        console.log('Shared drive check skipped:', e);
+      }
+    }
+    
+    console.log('Step 4: Creating folder with Drive API v3');
+    console.log('SupportsAllDrives:', supportsAllDrives);
+    
+    // Drive API v3로 폴더 생성
+    const createdFolder = Drive.Files.create(
+      folderMetadata,
+      null,  // media (폴더이므로 null)
+      {
+        supportsAllDrives: supportsAllDrives,
+        fields: 'id,name,mimeType,parents'  // v3에서는 'name' 사용
+      }
+    );
+    
+    console.log('Step 5: Folder created successfully:', createdFolder);
+    
+    const result = {
+      success: true,
+      folder: {
+        id: createdFolder.id,
+        name: createdFolder.name,  // v3에서는 'name' 사용
+        type: 'folder',
+        mimeType: createdFolder.mimeType,
+        icon: '📁',
+        isNew: true
+      }
+    };
+    
+    console.log('=== Function End: createNewFolder SUCCESS ===');
+    return result;
+    
+  } catch (error) {
+    console.error('ERROR in createNewFolder:', error.toString());
+    console.error('Error stack:', error.stack);
+    console.log('=== Function End: createNewFolder FAILED ===');
+    
+    // 더 친숙한 에러 메시지
+    let errorMessage = error.toString();
+    if (errorMessage.includes('Insufficient permissions')) {
+      errorMessage = '이 위치에 폴더를 만들 권한이 없습니다.';
+    } else if (errorMessage.includes('File not found')) {
+      errorMessage = '선택한 위치를 찾을 수 없습니다.';
+    }
+    
+    return { success: false, error: errorMessage };
+  }
+}
+
+/**
+ * 테스트용 - 폴더 생성 테스트
+ */
+function testCreateFolder() {
+  try {
+    console.log('=== 폴더 생성 테스트 시작 ===');
+    
+    // 1. 내 드라이브 루트에 테스트 폴더 생성
+    const testResult = createNewFolder('root', 'TEST_FOLDER_' + new Date().getTime());
+    console.log('테스트 결과:', testResult);
+    
+    if (testResult.success) {
+      console.log('✅ 폴더 생성 성공:', testResult.folder);
+      
+      // 생성된 폴더 삭제
+      try {
+        Drive.Files.remove(testResult.folder.id);
+        console.log('✅ 테스트 폴더 삭제 완료');
+      } catch (e) {
+        console.log('폴더 삭제 실패:', e);
+      }
+    } else {
+      console.log('❌ 폴더 생성 실패:', testResult.error);
+    }
+    
+    console.log('=== 폴더 생성 테스트 완료 ===');
+    return testResult;
+    
+  } catch (error) {
+    console.error('테스트 실패:', error);
     return { success: false, error: error.toString() };
   }
 }

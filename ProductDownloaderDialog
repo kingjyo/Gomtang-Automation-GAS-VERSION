@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+    
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 15px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+      overflow: hidden;
+    }
+    
+    .header {
+      background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+      color: white;
+      padding: 30px;
+      text-align: center;
+    }
+    
+    .header h1 {
+      font-size: 28px;
+      margin-bottom: 10px;
+    }
+    
+    .header p {
+      opacity: 0.9;
+      font-size: 14px;
+    }
+    
+    .content {
+      padding: 30px;
+    }
+    
+    /* 날짜 선택 섹션 */
+    .date-section {
+      margin-bottom: 25px;
+      padding: 20px;
+      border: 2px solid #e9ecef;
+      border-radius: 10px;
+      background: #f8f9fa;
+    }
+    
+    .date-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 15px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .date-input-group {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    
+    .date-input {
+      padding: 10px 15px;
+      border: 2px solid #dee2e6;
+      border-radius: 8px;
+      font-size: 14px;
+      width: 120px;
+      text-align: center;
+      font-weight: 500;
+      transition: all 0.3s ease;
+    }
+    
+    .date-input:focus {
+      outline: none;
+      border-color: #28a745;
+      box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.1);
+    }
+    
+    .date-input::placeholder {
+      color: #999;
+      font-weight: 400;
+    }
+    
+    .date-today-btn {
+      padding: 10px 15px;
+      border: none;
+      border-radius: 8px;
+      background: #28a745;
+      color: white;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      white-space: nowrap;
+    }
+    
+    .date-today-btn:hover {
+      background: #218838;
+      transform: translateY(-1px);
+    }
+    
+    .date-help {
+      font-size: 12px;
+      color: #666;
+      margin-left: 10px;
+      line-height: 1.4;
+    }
+    
+    /* 제품 목록 섹션 */
+    .products-section {
+      margin-bottom: 25px;
+    }
+    
+    .section-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 15px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .products-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+    
+    .product-card {
+      border: 2px solid #e9ecef;
+      border-radius: 10px;
+      padding: 20px;
+      background: #fafbfc;
+      transition: all 0.3s ease;
+      text-align: center;
+    }
+    
+    .product-card.available {
+      border-color: #28a745;
+      background: #d4edda;
+    }
+    
+    .product-card.unavailable {
+      border-color: #dc3545;
+      background: #f8d7da;
+      opacity: 0.7;
+    }
+    
+    .product-icon {
+      font-size: 48px;
+      margin-bottom: 10px;
+    }
+    
+    .product-name {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    
+    .product-info {
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 15px;
+    }
+    
+    .product-status {
+      font-size: 12px;
+      padding: 4px 8px;
+      border-radius: 12px;
+      display: inline-block;
+    }
+    
+    .status-available {
+      background: #28a745;
+      color: white;
+    }
+    
+    .status-unavailable {
+      background: #dc3545;
+      color: white;
+    }
+    
+    /* 버튼 그룹 */
+    .button-group {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin-top: 30px;
+      flex-wrap: wrap;
+    }
+    
+    .button {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .button.primary {
+      background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+      color: white;
+    }
+    
+    .button.primary:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(40, 167, 69, 0.4);
+    }
+    
+    .button.secondary {
+      background: #e9ecef;
+      color: #495057;
+    }
+    
+    .button.secondary:hover:not(:disabled) {
+      background: #dee2e6;
+    }
+    
+    .button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    /* 로딩 및 메시지 */
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 30px;
+    }
+    
+    .loading.show {
+      display: block;
+    }
+    
+    .spinner {
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #28a745;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 20px;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    .message {
+      padding: 20px;
+      border-radius: 10px;
+      margin-top: 20px;
+      display: none;
+      animation: slideIn 0.3s ease;
+    }
+    
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    .message.success {
+      background: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+      display: block;
+    }
+    
+    .message.error {
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+      display: block;
+    }
+    
+    .message.info {
+      background: #d1ecf1;
+      color: #0c5460;
+      border: 1px solid #bee5eb;
+      display: block;
+    }
+    
+    /* 다운로드 결과 */
+    .download-results {
+      margin-top: 20px;
+      display: none;
+    }
+    
+    .download-results.show {
+      display: block;
+    }
+    
+    .download-item {
+      padding: 15px;
+      border: 1px solid #dee2e6;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .download-item.success {
+      background: #d4edda;
+      border-color: #c3e6cb;
+    }
+    
+    .download-item.error {
+      background: #f8d7da;
+      border-color: #f5c6cb;
+    }
+    
+    .download-info {
+      flex: 1;
+    }
+    
+    .download-name {
+      font-weight: 600;
+      margin-bottom: 5px;
+    }
+    
+    .download-detail {
+      font-size: 12px;
+      color: #666;
+    }
+    
+    .download-link {
+      background: #007bff;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+    
+    .download-link:hover {
+      background: #0056b3;
+    }
+    
+    /* 다운로드 링크 표시 스타일 */
+    .download-link-container {
+      background: #f8f9fa;
+      border: 2px solid #28a745;
+      border-radius: 10px;
+      padding: 25px;
+      margin-top: 20px;
+    }
+    
+    .download-ready {
+      text-align: center;
+    }
+    
+    .download-actions {
+      margin-top: 20px;
+    }
+    
+    .download-url-section {
+      margin-bottom: 20px;
+    }
+    
+    .email-section {
+      margin-bottom: 20px;
+      padding-top: 15px;
+      border-top: 1px solid #dee2e6;
+    }
+    
+    .download-url-section label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #333;
+    }
+    
+    .url-input-group,
+    .email-input-group {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    
+    .url-input,
+    .email-input {
+      flex: 1;
+      padding: 10px;
+      border: 2px solid #dee2e6;
+      border-radius: 6px;
+      font-size: 12px;
+      background: white;
+    }
+    
+    .url-input {
+      font-family: 'Courier New', monospace;
+    }
+    
+    .email-input {
+      font-family: inherit;
+    }
+    
+    .url-input:focus,
+    .email-input:focus {
+      outline: none;
+      border-color: #28a745;
+    }
+    
+    .copy-btn,
+    .email-btn,
+    .email-load-btn {
+      padding: 10px 15px;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      white-space: nowrap;
+      transition: background 0.3s ease;
+    }
+    
+    .copy-btn {
+      background: #007bff;
+    }
+    
+    .copy-btn:hover {
+      background: #0056b3;
+    }
+    
+    .email-btn {
+      background: #28a745;
+    }
+    
+    .email-btn:hover {
+      background: #218838;
+    }
+    
+    .email-load-btn {
+      background: #6c757d;
+    }
+    
+    .email-load-btn:hover {
+      background: #5a6268;
+    }
+    
+    .email-recipients-display {
+      margin-top: 10px;
+      padding: 10px;
+      background: #f8f9fa;
+      border-radius: 6px;
+      border: 1px solid #dee2e6;
+      font-size: 12px;
+      display: none;
+    }
+    
+    .email-recipients-display.show {
+      display: block;
+    }
+    
+    .recipient-item {
+      padding: 10px 0;
+      border-bottom: 1px solid #e9ecef;
+      position: relative;
+    }
+    
+    .recipient-item:last-child {
+      border-bottom: none;
+    }
+    
+    .recipient-order {
+      display: inline-block;
+      background: #007bff;
+      color: white;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 10px;
+      font-weight: 600;
+      margin-bottom: 5px;
+    }
+    
+    .recipient-name {
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 2px;
+    }
+    
+    .recipient-email {
+      color: #666;
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      margin-bottom: 3px;
+    }
+    
+    .recipient-memo {
+      color: #999;
+      font-size: 10px;
+      font-style: italic;
+    }
+    
+    .download-hint {
+      font-size: 11px;
+      color: #666;
+      font-style: italic;
+      text-align: left;
+    }
+    
+    .quick-actions {
+      text-align: center;
+      padding-top: 15px;
+      border-top: 1px solid #dee2e6;
+    }
+    
+    @media (max-width: 768px) {
+      .products-grid {
+        grid-template-columns: 1fr;
+      }
+      
+      .button-group {
+        flex-direction: column;
+      }
+      
+      .url-input-group,
+      .email-input-group {
+        flex-direction: column;
+      }
+      
+      .url-input {
+        font-size: 11px;
+        word-break: break-all;
+      }
+      
+      .copy-btn,
+      .email-btn,
+      .email-load-btn {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>📦 품목별 다운로더</h1>
+      <p>사골고기곰탕, 사골곰탕, 육포 시트를 엑셀 파일로 다운로드</p>
+    </div>
+    
+    <div class="content">
+      <!-- 날짜 선택 섹션 -->
+      <div class="date-section">
+        <div class="date-title">
+          📅 다운로드할 날짜 지정
+        </div>
+        <div class="date-input-group">
+          <input type="text" id="dateInput" class="date-input" placeholder="0809" maxlength="4" pattern="[0-9]{4}">
+          <button class="date-today-btn" onclick="setTodayDate()">📅 오늘</button>
+          <div class="date-help">
+            MMDD 형식 (예: 0809)<br>
+            해당 날짜의 품목별 시트가 존재해야 합니다
+          </div>
+        </div>
+      </div>
+      
+      <!-- 제품 목록 섹션 -->
+      <div class="products-section">
+        <div class="section-title">
+          🍲 사용 가능한 제품 시트
+        </div>
+        <div class="products-grid" id="productsGrid">
+          <!-- 제품 카드들이 동적으로 추가됩니다 -->
+        </div>
+      </div>
+      
+      <div class="button-group">
+        <button class="button secondary" onclick="checkAvailableSheets()" id="checkButton">
+          <span>🔍</span> 시트 확인
+        </button>
+        <button class="button primary" onclick="downloadAllSheets()" id="downloadButton" disabled>
+          <span>📥</span> 품목별 엑셀 다운로드
+        </button>
+      </div>
+      
+      <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <div id="loadingText">처리 중입니다...</div>
+      </div>
+      
+      <div class="download-results" id="downloadResults">
+        <!-- 다운로드 결과가 여기에 표시됩니다 -->
+      </div>
+      
+      <div class="message" id="message"></div>
+    </div>
+  </div>
+  
+  <script>
+    let availableSheets = [];
+    let currentDate = '';
+    let currentDownloadInfo = null;
+    let emailRecipients = [];
+    
+    // 날짜 관련 함수들
+    function setTodayDate() {
+      const today = new Date();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      const mmdd = month + day;
+      
+      document.getElementById('dateInput').value = mmdd;
+      
+      // 날짜가 설정되면 자동으로 시트 확인
+      setTimeout(checkAvailableSheets, 100);
+    }
+    
+    function getSelectedDate() {
+      const dateInput = document.getElementById('dateInput').value.trim();
+      
+      // 입력값 검증
+      if (dateInput && dateInput.length === 4 && /^\d{4}$/.test(dateInput)) {
+        return dateInput;
+      } else if (dateInput && dateInput.length > 0) {
+        showMessage('날짜는 MMDD 형식 4자리 숫자로 입력해주세요 (예: 0809)', 'error');
+        return null;
+      }
+      
+      // 입력값이 없으면 오늘 날짜 사용
+      const today = new Date();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      return month + day;
+    }
+    
+    // 페이지 로드 시 오늘 날짜 설정 및 시트 확인
+    window.onload = function() {
+      setTodayDate();
+    };
+    
+    // 사용 가능한 시트 확인
+    function checkAvailableSheets() {
+      const targetDate = getSelectedDate();
+      if (targetDate === null) {
+        return;
+      }
+      
+      showLoading('사용 가능한 시트를 확인하고 있습니다...');
+      clearMessage();
+      
+      google.script.run
+        .withSuccessHandler(function(result) {
+          hideLoading();
+          
+          if (result.success) {
+            availableSheets = result.availableSheets;
+            currentDate = result.dateString;
+            
+            updateProductsGrid(result.availableSheets);
+            
+            if (result.availableSheets.length > 0) {
+              document.getElementById('downloadButton').disabled = false;
+              showMessage(`${result.availableSheets.length}개의 품목 시트를 찾았습니다.`, 'success');
+            } else {
+              document.getElementById('downloadButton').disabled = true;
+              showMessage(`${result.dateString} 날짜의 품목별 시트를 찾을 수 없습니다.`, 'info');
+            }
+          } else {
+            showMessage(result.error, 'error');
+            updateProductsGrid([]);
+            document.getElementById('downloadButton').disabled = true;
+          }
+        })
+        .withFailureHandler(function(error) {
+          hideLoading();
+          showMessage(`시트 확인 실패: ${error}`, 'error');
+          updateProductsGrid([]);
+          document.getElementById('downloadButton').disabled = true;
+        })
+        .getAvailableProductSheets(targetDate);
+    }
+    
+    // 제품 카드 그리드 업데이트
+    function updateProductsGrid(availableSheets) {
+      const grid = document.getElementById('productsGrid');
+      const products = ['사골고기곰탕', '사골곰탕', '육포'];
+      const productIcons = {
+        '사골고기곰탕': '🥩',
+        '사골곰탕': '🍲', 
+        '육포': '🥓'
+      };
+      
+      grid.innerHTML = '';
+      
+      products.forEach(product => {
+        const available = availableSheets.find(sheet => sheet.product === product);
+        
+        const card = document.createElement('div');
+        card.className = `product-card ${available ? 'available' : 'unavailable'}`;
+        
+        card.innerHTML = `
+          <div class="product-icon">${productIcons[product] || '📦'}</div>
+          <div class="product-name">${product}</div>
+          <div class="product-info">
+            ${available ? `${available.rowCount}행의 데이터` : '데이터 없음'}
+          </div>
+          <div class="product-status ${available ? 'status-available' : 'status-unavailable'}">
+            ${available ? '다운로드 가능' : '시트 없음'}
+          </div>
+        `;
+        
+        grid.appendChild(card);
+      });
+    }
+    
+    // 모든 시트 다운로드
+    function downloadAllSheets() {
+      const targetDate = getSelectedDate();
+      if (targetDate === null) {
+        return;
+      }
+      
+      if (availableSheets.length === 0) {
+        showMessage('다운로드할 시트가 없습니다. 먼저 시트를 확인해주세요.', 'error');
+        return;
+      }
+      
+      showLoading('엑셀 파일을 생성하고 있습니다...');
+      clearMessage();
+      hideDownloadResults();
+      
+      google.script.run
+        .withSuccessHandler(function(result) {
+          hideLoading();
+          
+          if (result.success) {
+            showMessage(`✅ 엑셀 파일 생성 완료!\n${result.downloadInfo.sheetsIncluded.length}개 품목이 포함된 파일을 생성했습니다.`, 'success');
+            showDownloadResults([result.downloadInfo]);
+          } else {
+            showMessage(result.error, 'error');
+          }
+        })
+        .withFailureHandler(function(error) {
+          hideLoading();
+          showMessage(`다운로드 실패: ${error}`, 'error');
+        })
+        .downloadProductSheets(targetDate);
+    }
+    
+    // 다운로드 결과 표시
+    function showDownloadResults(downloadResults) {
+      const container = document.getElementById('downloadResults');
+      container.innerHTML = '';
+      
+      downloadResults.forEach(result => {
+        const item = document.createElement('div');
+        item.className = 'download-item success';
+        
+        item.innerHTML = `
+          <div class="download-info">
+            <div class="download-name">📦 ${result.fileName}</div>
+            <div class="download-detail">포함 시트: ${result.sheetsIncluded.join(', ')}</div>
+          </div>
+          <button class="download-link" onclick="downloadFile('${result.fileId}', '${result.fileName}')">
+            📥 엑셀 다운로드
+          </button>
+        `;
+        
+        container.appendChild(item);
+      });
+      
+      container.classList.add('show');
+    }
+    
+    function hideDownloadResults() {
+      document.getElementById('downloadResults').classList.remove('show');
+    }
+    
+    // 파일 다운로드 함수
+    function downloadFile(fileId, fileName) {
+      try {
+        showMessage('다운로드를 준비하고 있습니다...', 'info');
+        
+        google.script.run
+          .withSuccessHandler(function(result) {
+            if (result.success) {
+              // 자동으로 다운로드 시작
+              startAutomaticDownload(result.downloadUrl, result.fileName);
+            } else {
+              showMessage(result.error, 'error');
+            }
+          })
+          .withFailureHandler(function(error) {
+            showMessage(`다운로드 실패: ${error}`, 'error');
+          })
+          .triggerDownload(fileId, fileName);
+        
+      } catch (error) {
+        console.error('Download failed:', error);
+        showMessage(`다운로드 실패: ${error}`, 'error');
+      }
+    }
+    
+    // 다운로드 링크 표시
+    function startAutomaticDownload(downloadUrl, fileName) {
+      showDownloadLink(downloadUrl, fileName);
+    }
+    
+    // 사용자 친화적인 다운로드 링크 표시
+    function showDownloadLink(downloadUrl, fileName) {
+      // 현재 다운로드 정보 저장
+      currentDownloadInfo = {
+        downloadUrl: downloadUrl,
+        fileName: fileName
+      };
+      
+      const container = document.getElementById('downloadResults');
+      container.innerHTML = '';
+      
+      const linkContainer = document.createElement('div');
+      linkContainer.className = 'download-link-container';
+      linkContainer.innerHTML = `
+        <div class="download-ready">
+          <h3 style="color: #28a745; margin-bottom: 15px;">📥 다운로드 준비완료!</h3>
+          <div class="file-info">
+            <div class="file-name">📄 ${fileName}</div>
+          </div>
+          
+          <div class="download-actions">
+            <div class="download-url-section">
+              <label>다운로드 링크:</label>
+              <div class="url-input-group">
+                <input type="text" id="downloadUrlInput" value="${downloadUrl}" readonly class="url-input">
+                <button onclick="copyDownloadUrl()" class="copy-btn">📋 복사</button>
+              </div>
+              <div class="download-hint">
+                위 링크를 복사하여 새 탭의 주소창에 붙여넣으면 다운로드가 시작됩니다
+              </div>
+            </div>
+            
+            <div class="email-section">
+              <label>이메일 전송:</label>
+              <div class="email-input-group">
+                <button onclick="loadEmailRecipients()" class="email-load-btn">👥 주소록 불러오기</button>
+                <button onclick="sendEmailWithAttachment()" class="email-btn">📧 전송</button>
+              </div>
+              <div class="email-recipients-display" id="emailRecipientsDisplay">
+                <!-- 이메일 수신자 목록이 여기에 표시됩니다 -->
+              </div>
+              <div class="download-hint">
+                '이메일_설정' 시트의 주소록으로 간편식 출고요청을 전송합니다
+              </div>
+            </div>
+            
+            <div class="quick-actions">
+              <button onclick="openInNewTab('${downloadUrl}')" class="button primary">
+                🔗 새 탭에서 열기
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+      
+      container.appendChild(linkContainer);
+      container.classList.add('show');
+      
+      showMessage('✅ 엑셀 파일이 생성되었습니다!', 'success');
+    }
+    
+    // URL 복사 기능
+    function copyDownloadUrl() {
+      const urlInput = document.getElementById('downloadUrlInput');
+      urlInput.select();
+      urlInput.setSelectionRange(0, 99999); // 모바일 지원
+      
+      try {
+        document.execCommand('copy');
+        showMessage('📋 다운로드 링크가 클립보드에 복사되었습니다!\n새 탭의 주소창에 붙여넣기(Ctrl+V)하세요.', 'success');
+      } catch (error) {
+        showMessage('복사에 실패했습니다. 링크를 수동으로 선택하여 복사해주세요.', 'error');
+      }
+    }
+    
+    // 새 탭에서 열기 (가능한 경우)
+    function openInNewTab(url) {
+      try {
+        // 새 창 열기 시도
+        const newWindow = window.open(url, '_blank');
+        if (newWindow) {
+          showMessage('새 탭에서 다운로드가 시작됩니다.', 'success');
+        } else {
+          showMessage('팝업이 차단되었습니다. 위의 링크를 복사해서 사용해주세요.', 'info');
+        }
+      } catch (error) {
+        showMessage('새 탭 열기에 실패했습니다. 링크를 복사해서 사용해주세요.', 'error');
+      }
+    }
+    
+    // 이메일 주소록 불러오기
+    function loadEmailRecipients() {
+      showMessage('이메일 주소록을 불러오고 있습니다...', 'info');
+      
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (result.success) {
+            emailRecipients = result.recipients;
+            displayEmailRecipients(result.recipients);
+            showMessage(`📧 ${result.recipients.length}명의 수신자를 불러왔습니다.`, 'success');
+          } else {
+            showMessage(`주소록 불러오기 실패: ${result.error}`, 'error');
+          }
+        })
+        .withFailureHandler(function(error) {
+          showMessage(`주소록 불러오기 실패: ${error}`, 'error');
+        })
+        .getEmailRecipients();
+    }
+    
+    // 이메일 수신자 목록 표시
+    function displayEmailRecipients(recipients) {
+      const display = document.getElementById('emailRecipientsDisplay');
+      display.innerHTML = '';
+      
+      if (recipients.length === 0) {
+        display.innerHTML = '<div style="text-align: center; color: #666;">등록된 수신자가 없습니다.</div>';
+      } else {
+        recipients.forEach(recipient => {
+          const item = document.createElement('div');
+          item.className = 'recipient-item';
+          item.innerHTML = `
+            <div class="recipient-order">${recipient.order}순위</div>
+            <div class="recipient-name">${recipient.name}</div>
+            <div class="recipient-email">${recipient.email}</div>
+            <div class="recipient-memo">${recipient.memo}</div>
+          `;
+          display.appendChild(item);
+        });
+      }
+      
+      display.classList.add('show');
+    }
+    
+    // 이메일 전송 함수
+    function sendEmailWithAttachment() {
+      if (!currentDownloadInfo) {
+        showMessage('다운로드 정보가 없습니다. 먼저 파일을 생성해주세요.', 'error');
+        return;
+      }
+      
+      if (emailRecipients.length === 0) {
+        showMessage('수신자가 없습니다. 먼저 주소록을 불러와주세요.', 'error');
+        return;
+      }
+      
+      const targetDate = getSelectedDate();
+      if (targetDate === null) {
+        return;
+      }
+      
+      // 파일 ID 추출 (downloadUrl에서)
+      const fileIdMatch = currentDownloadInfo.downloadUrl.match(/id=([^&]+)/);
+      if (!fileIdMatch) {
+        showMessage('파일 ID를 찾을 수 없습니다.', 'error');
+        return;
+      }
+      
+      const fileId = fileIdMatch[1];
+      
+      // 이메일 주소 목록 생성
+      const recipients = emailRecipients.map(r => r.email).join(',');
+      
+      showMessage('이메일을 전송하고 있습니다...', 'info');
+      
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (result.success) {
+            showMessage(`✅ 이메일 전송 완료!\n받는 사람: ${result.recipientCount}명\n\n출고 요청이 성공적으로 전송되었습니다.`, 'success');
+          } else {
+            showMessage(`이메일 전송 실패: ${result.error}`, 'error');
+          }
+        })
+        .withFailureHandler(function(error) {
+          showMessage(`이메일 전송 실패: ${error}`, 'error');
+        })
+        .sendShipmentEmail(targetDate, recipients, fileId, currentDownloadInfo.fileName);
+    }
+    
+    // UI 헬퍼 함수들
+    function showLoading(text) {
+      document.getElementById('loading').classList.add('show');
+      document.getElementById('loadingText').textContent = text || '처리 중입니다...';
+      document.querySelectorAll('.button').forEach(button => {
+        button.disabled = true;
+      });
+    }
+    
+    function hideLoading() {
+      document.getElementById('loading').classList.remove('show');
+      document.querySelectorAll('.button').forEach(button => {
+        button.disabled = false;
+      });
+      
+      // 다운로드 버튼 상태는 별도로 관리
+      if (availableSheets.length === 0) {
+        document.getElementById('downloadButton').disabled = true;
+      }
+    }
+    
+    function showMessage(text, type) {
+      const message = document.getElementById('message');
+      message.textContent = text;
+      message.className = 'message ' + type;
+      
+      if (type === 'success') {
+        setTimeout(clearMessage, 5000);
+      }
+    }
+    
+    function clearMessage() {
+      const message = document.getElementById('message');
+      message.classList.remove('success', 'error', 'info');
+    }
+    
+    // 날짜 입력 필드에서 엔터키 처리
+    document.getElementById('dateInput').addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        checkAvailableSheets();
+      }
+    });
+    
+    // 날짜 입력 필드 변경 시 시트 확인 버튼 활성화
+    document.getElementById('dateInput').addEventListener('input', function() {
+      document.getElementById('downloadButton').disabled = true;
+      availableSheets = [];
+      updateProductsGrid([]);
+      clearMessage();
+    });
+  </script>
+</body>
+</html>

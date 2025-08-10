@@ -26,19 +26,25 @@ const Verification = {
       // 시트 가져오기
       const sheetAName = datePrefix + '_간편식_싸이버스카이';
       const sheetBName = datePrefix + '_간편식_EDI';
-      const sheetCName = datePrefix + ' 간편식 수기송장';
+      const sheetCName = datePrefix + '_간편식_수기송장';
+      const sheetCNameOld = datePrefix + ' 간편식 수기송장'; // 기존 형식 호환
       
       const sheetA = spreadsheet.getSheetByName(sheetAName);
       const sheetB = spreadsheet.getSheetByName(sheetBName);
-      const sheetC = spreadsheet.getSheetByName(sheetCName);
+      let sheetC = spreadsheet.getSheetByName(sheetCName);
+      
+      // 새 형식이 없으면 기존 형식 시도
+      if (!sheetC) {
+        sheetC = spreadsheet.getSheetByName(sheetCNameOld);
+      }
       
       if (!sheetA || !sheetB || !sheetC) {
         return {
           success: false,
           message: '필요한 시트를 찾을 수 없습니다.\n' +
-                   `A시트: ${sheetA ? '있음' : '없음'}\n` +
-                   `B시트: ${sheetB ? '있음' : '없음'}\n` +
-                   `C시트: ${sheetC ? '있음' : '없음'}`
+                   `싸이버스카이: ${sheetA ? '있음' : '없음'}\n` +
+                   `EDI: ${sheetB ? '있음' : '없음'}\n` +
+                   `수기송장: ${sheetC ? '있음' : '없음'}`
         };
       }
       
@@ -50,7 +56,7 @@ const Verification = {
       // 헤더 찾기
       const colA = this.findColumns(dataA[0], ['PROD_NAME', 'ORDERCNT']);
       const colB = this.findColumns(dataB[0], ['상품명', '수량']);
-      const colC = this.findColumns(dataC[0], ['품목명', '수량']);
+      const colC = this.findColumns(dataC[0], ['품목명', '수량', '메모1']);
       
       // B시트 상품명 정제
       const processedDataB = this.processProductNames(dataB.slice(1), colB['상품명']);
@@ -118,51 +124,102 @@ const Verification = {
   },
   
   /**
-   * 상품별 수량 집계
+   * 상품별 수량 집계 (품목명 정규화 적용)
    */
   calculateProductTotals: function(dataA, colA, dataB, colB, dataC, colC) {
     const totals = {};
     
-    // A시트 집계
+    console.log('=== 상품별 수량 집계 시작 ===');
+    
+    // A시트 집계 (싸이버스카이)
+    console.log('A시트(싸이버스카이) 집계 중...');
     for (const row of dataA) {
-      const prodName = String(row[colA['PROD_NAME']] || '').trim();
+      const rawProdName = String(row[colA['PROD_NAME']] || '').trim();
+      const normalizedProdName = this.normalizeProductName(rawProdName);
       const qty = Number(row[colA['ORDERCNT']] || 0);
       
-      if (prodName) {
-        if (!totals[prodName]) {
-          totals[prodName] = { a: 0, b: 0, c: 0 };
+      if (normalizedProdName) {
+        if (!totals[normalizedProdName]) {
+          totals[normalizedProdName] = { a: 0, b: 0, c: 0 };
         }
-        totals[prodName].a += qty;
+        totals[normalizedProdName].a += qty;
+        console.log(`  ${rawProdName} -> ${normalizedProdName}: +${qty} (총 ${totals[normalizedProdName].a})`);
       }
     }
     
-    // B시트 집계
+    // B시트 집계 (EDI)
+    console.log('B시트(EDI) 집계 중...');
     for (const row of dataB) {
-      const prodName = String(row[colB['상품명']] || '').trim();
+      const rawProdName = String(row[colB['상품명']] || '').trim();
+      const normalizedProdName = this.normalizeProductName(rawProdName);
       const qty = Number(row[colB['수량']] || 0);
       
-      if (prodName) {
-        if (!totals[prodName]) {
-          totals[prodName] = { a: 0, b: 0, c: 0 };
+      if (normalizedProdName) {
+        if (!totals[normalizedProdName]) {
+          totals[normalizedProdName] = { a: 0, b: 0, c: 0 };
         }
-        totals[prodName].b += qty;
+        totals[normalizedProdName].b += qty;
+        console.log(`  ${rawProdName} -> ${normalizedProdName}: +${qty} (총 ${totals[normalizedProdName].b})`);
       }
     }
     
-    // C시트 집계
+    // C시트 집계 (수기송장) - 쿠팡 마킹된 행 제외
+    console.log('C시트(수기송장) 집계 중...');
+    let excludedCoupangRows = 0;
     for (const row of dataC) {
-      const prodName = String(row[colC['품목명']] || '').trim();
+      const rawProdName = String(row[colC['품목명']] || '').trim();
+      const normalizedProdName = this.normalizeProductName(rawProdName);
       const qty = Number(row[colC['수량']] || 0);
       
-      if (prodName) {
-        if (!totals[prodName]) {
-          totals[prodName] = { a: 0, b: 0, c: 0 };
+      // S열(메모1)에 "쿠팡" 마킹이 있으면 검산에서 제외
+      const memo1 = String(row[colC['메모1']] || '').trim();
+      if (memo1 === '쿠팡') {
+        excludedCoupangRows++;
+        console.log(`  [제외] 쿠팡 데이터: ${rawProdName}, 수량: ${qty}`);
+        continue;
+      }
+      
+      if (normalizedProdName) {
+        if (!totals[normalizedProdName]) {
+          totals[normalizedProdName] = { a: 0, b: 0, c: 0 };
         }
-        totals[prodName].c += qty;
+        totals[normalizedProdName].c += qty;
+        console.log(`  ${rawProdName} -> ${normalizedProdName}: +${qty} (총 ${totals[normalizedProdName].c})`);
       }
     }
     
+    if (excludedCoupangRows > 0) {
+      console.log(`쿠팡 마킹으로 검산에서 제외된 행: ${excludedCoupangRows}개`);
+    }
+    
+    console.log('=== 최종 집계 결과 ===');
+    Object.keys(totals).forEach(product => {
+      const total = totals[product];
+      console.log(`${product}: 싸이버스카이=${total.a}, EDI=${total.b}, 수기송장=${total.c}`);
+    });
+    console.log('=== 상품별 수량 집계 완료 ===');
+    
     return totals;
+  },
+  
+  /**
+   * 품목명 정규화 (검산용)
+   */
+  normalizeProductName: function(productName) {
+    if (!productName) return '';
+    
+    let normalized = productName.trim();
+    
+    // 1. "(1박스 5개입)" -> "(5팩 1세트)"
+    normalized = normalized.replace(/\(1박스\s*(\d+)개입\)/g, '($1팩 1세트)');
+    
+    // 2. "5개입" -> "(5팩 1세트)" 
+    normalized = normalized.replace(/(\d+)개입/g, '($1팩 1세트)');
+    
+    // 3. 공백 정규화
+    normalized = normalized.replace(/\s+/g, ' ').trim();
+    
+    return normalized;
   },
   
   /**
@@ -199,8 +256,8 @@ const Verification = {
     
     for (const detail of details) {
       message += `${detail.status} ${detail.product}\n`;
-      message += `   B시트: ${detail.b} + C시트: ${detail.c} = ${detail.calculated}\n`;
-      message += `   A시트: ${detail.a}\n`;
+      message += `   EDI: ${detail.b} + 수기송장: ${detail.c} = ${detail.calculated}\n`;
+      message += `   싸이버스카이: ${detail.a}\n`;
       if (!detail.isMatch) {
         message += `   차이: ${detail.a - detail.calculated}\n`;
       }
@@ -238,7 +295,7 @@ const Verification = {
     sheet = spreadsheet.insertSheet(sheetName);
     
     // 헤더 설정
-    const headers = ['상태', '품목명', 'B시트', 'C시트', '합계', 'A시트', '차이'];
+    const headers = ['상태', '품목명', 'EDI', '수기송장', '합계', '싸이버스카이', '차이'];
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
     
     // 데이터 입력

@@ -299,7 +299,7 @@
         google.script.run
           .withSuccessHandler(onUploadSuccess)
           .withFailureHandler(onUploadError)
-          .CoupangProcessor.processCoupangFile(fileData, selectedFile.name);
+          .processCoupangFile(fileData, selectedFile.name);
       };
       
       reader.readAsDataURL(selectedFile);

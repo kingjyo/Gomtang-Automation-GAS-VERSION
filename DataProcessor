@@ -193,7 +193,7 @@ const DataProcessor = {
       }
     }
     
-    const newSheetName = datePrefix + ' 간편식 수기송장';
+    const newSheetName = datePrefix + '_간편식_수기송장';
     
     // 기존 시트 삭제
     let targetSheet = spreadsheet.getSheetByName(newSheetName);
@@ -226,6 +226,10 @@ const DataProcessor = {
     // 데이터 변환 및 입력
     const newRows = [];
     for (const row of processedARows) {
+      // 품목명 변환 처리
+      let productName = row[colA['PROD_NAME']] || '';
+      productName = this.convertProductName(productName);
+      
       const newRow = [
         row[colA['ORDERER']] || '',                    // A: 보내시는 분
         row[colA['PHONE']] || '',                      // B: 보내시는 분 전화
@@ -240,7 +244,7 @@ const DataProcessor = {
         row[colA['POST_NO']] || '',                    // K: 받는분우편번호
         row[colA['주소']] || '',                       // L: 받는분총주소
         row[colA['ORDERCNT']] || 0,                    // M: 수량
-        row[colA['PROD_NAME']] || '',                  // N: 품목명
+        productName,                                   // N: 품목명 (변환됨)
         '',                                             // O: 메모
         '',                                             // P: 운임종류
         ''                                              // Q: 택배사
@@ -250,9 +254,97 @@ const DataProcessor = {
     
     // 데이터 입력
     if (newRows.length > 0) {
-      targetSheet.getRange(2, 1, newRows.length, newRows[0].length).setValues(newRows);
+      const dataRange = targetSheet.getRange(2, 1, newRows.length, newRows[0].length);
+      dataRange.setValues(newRows);
+      
+      // 숫자 열들 오른쪽 정렬
+      this.applyNumberFormatting(targetSheet, newRows.length);
     }
     
     return targetSheet;
+  },
+  
+  /**
+   * 품목명 변환 및 정규화
+   */
+  convertProductName: function(productName) {
+    if (!productName) return '';
+    
+    console.log('=== 품목명 변환 시작 ===');
+    console.log('원본:', productName);
+    
+    let converted = productName;
+    
+    // 1. "제동 사골곰탕 (1박스 5개입)" -> "제동 사골곰탕 (5팩 1세트)" 
+    converted = converted.replace(/\(1박스\s*(\d+)개입\)/g, '($1팩 1세트)');
+    
+    // 2. "제동 사골곰탕 5개입" -> "제동 사골곰탕 (5팩 1세트)"
+    converted = converted.replace(/(\d+)개입/g, '($1팩 1세트)');
+    
+    // 3. 이미 변환된 것이 중복 변환되지 않도록 처리
+    // "(5팩 1세트)개입" 같은 경우 방지
+    converted = converted.replace(/\((\d+팩 1세트)\)개입/g, '($1)');
+    
+    console.log('변환 결과:', converted);
+    console.log('=== 품목명 변환 완료 ===');
+    
+    return converted;
+  },
+  
+  /**
+   * 검산용 품목명 정규화 (모든 형식을 통일된 형태로)
+   */
+  normalizeProductName: function(productName) {
+    if (!productName) return '';
+    
+    let normalized = productName.trim();
+    
+    // 1. "(1박스 5개입)" -> "(5팩 1세트)"
+    normalized = normalized.replace(/\(1박스\s*(\d+)개입\)/g, '($1팩 1세트)');
+    
+    // 2. "5개입" -> "(5팩 1세트)" 
+    normalized = normalized.replace(/(\d+)개입/g, '($1팩 1세트)');
+    
+    // 3. 공백 정규화
+    normalized = normalized.replace(/\s+/g, ' ').trim();
+    
+    return normalized;
+  },
+  
+  /**
+   * 숫자 데이터 오른쪽 정렬 적용
+   */
+  applyNumberFormatting: function(sheet, rowCount) {
+    console.log('=== 숫자 포매팅 적용 ===');
+    console.log('시트:', sheet.getName(), '행 수:', rowCount);
+    
+    if (rowCount === 0) return;
+    
+    try {
+      // B열: 보내시는 분 전화
+      const phoneRange = sheet.getRange(2, 2, rowCount, 1);
+      phoneRange.setHorizontalAlignment('right');
+      console.log('B열 (보내시는 분 전화) 오른쪽 정렬 적용');
+      
+      // J열: 받는분핸드폰
+      const cellRange = sheet.getRange(2, 10, rowCount, 1);
+      cellRange.setHorizontalAlignment('right');
+      console.log('J열 (받는분핸드폰) 오른쪽 정렬 적용');
+      
+      // K열: 받는분우편번호
+      const postalRange = sheet.getRange(2, 11, rowCount, 1);
+      postalRange.setHorizontalAlignment('right');
+      console.log('K열 (받는분우편번호) 오른쪽 정렬 적용');
+      
+      // M열: 수량
+      const quantityRange = sheet.getRange(2, 13, rowCount, 1);
+      quantityRange.setHorizontalAlignment('right');
+      quantityRange.setNumberFormat('#,##0'); // 천 단위 구분자 적용
+      console.log('M열 (수량) 오른쪽 정렬 및 숫자 형식 적용');
+      
+      console.log('=== 숫자 포매팅 완료 ===');
+    } catch (error) {
+      console.error('포매팅 적용 실패:', error);
+    }
   }
 };

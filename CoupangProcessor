@@ -65,17 +65,24 @@ const CoupangProcessor = {
       
       for (const sheet of sheets) {
         const name = sheet.getName();
-        if (name.includes(' 간편식 수기송장') && !name.startsWith('TEST_')) {
-          datePrefix = name.split(' ')[0];
+        if ((name.includes('_간편식_수기송장') || name.includes(' 간편식 수기송장')) && !name.startsWith('TEST_')) {
+          datePrefix = name.split(/[ _]/)[0];
           break;
         }
       }
       
-      const manualSheetName = datePrefix + ' 간편식 수기송장';
+      const manualSheetName = datePrefix + '_간편식_수기송장';
+      const manualSheetNameOld = datePrefix + ' 간편식 수기송장'; // 기존 형식 호환
       
-      const manualSheet = spreadsheet.getSheetByName(manualSheetName);
+      let manualSheet = spreadsheet.getSheetByName(manualSheetName);
+      
+      // 새 형식이 없으면 기존 형식 시도
       if (!manualSheet) {
-        throw new Error('수기송장 시트를 찾을 수 없습니다: ' + manualSheetName);
+        manualSheet = spreadsheet.getSheetByName(manualSheetNameOld);
+      }
+      
+      if (!manualSheet) {
+        throw new Error('수기송장 시트를 찾을 수 없습니다: ' + manualSheetName + ' 또는 ' + manualSheetNameOld);
       }
       
       // 쿠팡 데이터 헤더와 열 매핑
@@ -244,6 +251,9 @@ const CoupangProcessor = {
     newRow[11] = coupangRow[coupangMapping.address] || ''; // L: 받는분총주소
     newRow[12] = coupangRow[coupangMapping.quantity] || 0; // M: 수량
     newRow[13] = convertedProductName; // N: 품목명
+    newRow[18] = '쿠팡'; // S: 메모1 (쿠팡 마킹)
+    
+    console.log('Coupang row converted with 쿠팡 marker:', { productName: convertedProductName, quantity: newRow[12] });
     
     return newRow;
   },
@@ -276,3 +286,24 @@ const CoupangProcessor = {
     }
   }
 };
+
+/**
+ * HTML에서 호출할 전역 함수 (CoupangUploader용)
+ */
+function processCoupangFile(fileData, fileName) {
+  console.log('=== Function Start: processCoupangFile ===');
+  console.log('Parameters:', { fileName });
+  
+  try {
+    const result = CoupangProcessor.processCoupangFile(fileData, fileName);
+    console.log('Processing result:', result);
+    console.log('=== Function End: processCoupangFile SUCCESS ===');
+    return result;
+    
+  } catch (error) {
+    console.error('ERROR in processCoupangFile:', error.toString());
+    console.error('Error stack:', error.stack);
+    console.log('=== Function End: processCoupangFile FAILED ===');
+    return { success: false, error: error.toString() };
+  }
+}

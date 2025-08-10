@@ -148,6 +148,39 @@
       flex: 1;
       padding: 16px;
       overflow-y: auto;
+      position: relative;
+    }
+    .pagination {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 16px;
+      padding: 12px;
+      border-top: 1px solid #e0e0e0;
+      background: #fff;
+    }
+    .pagination button {
+      padding: 8px 16px;
+      border: 1px solid #dadce0;
+      border-radius: 8px;
+      background: #fff;
+      cursor: pointer;
+      font-size: 14px;
+      color: #1a73e8;
+      transition: all 0.2s;
+    }
+    .pagination button:hover:not(:disabled) {
+      background: #f1f5ff;
+      border-color: #1a73e8;
+    }
+    .pagination button:disabled {
+      color: #9aa0a6;
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+    .pagination .page-info {
+      color: #5f6368;
+      font-size: 14px;
     }
     .file-grid {
       display: grid;
@@ -161,6 +194,7 @@
       text-align: center;
       cursor: pointer;
       transition: all 0.2s;
+      user-select: none;
     }
     .file-item:hover {
       background: #f8f9fa;
@@ -169,6 +203,10 @@
     .file-item.selectable:hover {
       background: #e8f0fe;
       border-color: #1a73e8;
+    }
+    .file-item.selected {
+      background: #d2e3fc;
+      border-color: #1967d2;
     }
     .file-icon {
       font-size: 32px;
@@ -239,14 +277,29 @@
           <div class="loading-text">로딩 중...</div>
         </div>
         <div class="explorer-main">
-          <div class="explorer-search">
-            <input type="text" id="searchInput" class="search-input" placeholder="파일 및 폴더 검색" onkeyup="handleSearch(event)">
+          <div class="explorer-search" style="display: flex; gap: 8px; align-items: center;">
+            <input type="text" id="searchInput" class="search-input" placeholder="파일 및 폴더 검색 (하위 폴더 포함)" onkeyup="handleSearch(event)" style="flex: 1;">
+            <button id="selectCurrentFolderBtn" class="btn pick" onclick="selectCurrentFolder()" style="padding: 8px 12px; font-size: 13px; display: none; background: #34a853; color: white;">
+              <i class="fa-solid fa-check"></i> 이 폴더 선택
+            </button>
+            <button id="newFolderBtn" class="btn pick" onclick="showNewFolderDialog()" style="padding: 8px 12px; font-size: 13px;">
+              <i class="fa-solid fa-folder-plus"></i> 새 폴더
+            </button>
           </div>
           <div id="explorerBreadcrumb" class="explorer-breadcrumb">
             내 드라이브
           </div>
           <div id="explorerContent" class="explorer-content">
             <div class="loading-text">로딩 중...</div>
+          </div>
+          <div id="pagination" class="pagination" style="display: none;">
+            <button id="prevPageBtn" onclick="loadPreviousPage()" disabled>
+              <i class="fa-solid fa-chevron-left"></i> 이전
+            </button>
+            <span class="page-info" id="pageInfo">1 페이지</span>
+            <button id="nextPageBtn" onclick="loadNextPage()" disabled>
+              다음 <i class="fa-solid fa-chevron-right"></i>
+            </button>
           </div>
         </div>
       </div>

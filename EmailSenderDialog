@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #dc3545 0%, #fd7e14 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+    
+    .container {
+      max-width: 700px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 15px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+      overflow: hidden;
+    }
+    
+    .header {
+      background: linear-gradient(135deg, #dc3545 0%, #fd7e14 100%);
+      color: white;
+      padding: 30px;
+      text-align: center;
+    }
+    
+    .header h1 {
+      font-size: 28px;
+      margin-bottom: 10px;
+    }
+    
+    .header p {
+      opacity: 0.9;
+      font-size: 14px;
+    }
+    
+    .content {
+      padding: 30px;
+    }
+    
+    /* 날짜 선택 섹션 */
+    .date-section {
+      margin-bottom: 25px;
+      padding: 20px;
+      border: 2px solid #e9ecef;
+      border-radius: 10px;
+      background: #f8f9fa;
+    }
+    
+    .date-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 15px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .date-input-group {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    
+    .date-input {
+      padding: 10px 15px;
+      border: 2px solid #dee2e6;
+      border-radius: 8px;
+      font-size: 14px;
+      width: 120px;
+      text-align: center;
+      font-weight: 500;
+      transition: all 0.3s ease;
+    }
+    
+    .date-input:focus {
+      outline: none;
+      border-color: #dc3545;
+      box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.1);
+    }
+    
+    .date-input::placeholder {
+      color: #999;
+      font-weight: 400;
+    }
+    
+    .date-today-btn {
+      padding: 10px 15px;
+      border: none;
+      border-radius: 8px;
+      background: #dc3545;
+      color: white;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      white-space: nowrap;
+    }
+    
+    .date-today-btn:hover {
+      background: #c82333;
+      transform: translateY(-1px);
+    }
+    
+    .date-help {
+      font-size: 12px;
+      color: #666;
+      margin-left: 10px;
+      line-height: 1.4;
+    }
+    
+    /* 드래그 앤 드롭 영역 */
+    .upload-section {
+      margin-bottom: 25px;
+    }
+    
+    .section-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 15px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .upload-area {
+      border: 3px dashed #dee2e6;
+      border-radius: 15px;
+      padding: 40px;
+      text-align: center;
+      transition: all 0.3s ease;
+      cursor: pointer;
+      background: #fafbfc;
+      min-height: 200px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    }
+    
+    .upload-area:hover {
+      border-color: #dc3545;
+      background: #fff5f5;
+      transform: translateY(-2px);
+    }
+    
+    .upload-area.dragover {
+      background: #fff5f5;
+      border-color: #dc3545;
+      border-style: solid;
+      transform: scale(1.02);
+      box-shadow: 0 10px 30px rgba(220, 53, 69, 0.2);
+    }
+    
+    .upload-area.has-file {
+      background: #d4edda;
+      border-color: #28a745;
+      border-style: solid;
+    }
+    
+    .upload-icon {
+      font-size: 64px;
+      color: #dc3545;
+      margin-bottom: 20px;
+    }
+    
+    .upload-area.has-file .upload-icon {
+      color: #28a745;
+    }
+    
+    .upload-title {
+      font-size: 24px;
+      font-weight: 600;
+      margin-bottom: 10px;
+      color: #333;
+    }
+    
+    .upload-description {
+      font-size: 16px;
+      color: #666;
+      margin-bottom: 15px;
+    }
+    
+    .upload-hint {
+      font-size: 14px;
+      color: #999;
+    }
+    
+    .file-info {
+      margin-top: 20px;
+      padding: 20px;
+      background: white;
+      border-radius: 10px;
+      text-align: left;
+      display: none;
+      border: 2px solid #28a745;
+    }
+    
+    .file-info.show {
+      display: block;
+    }
+    
+    .file-name {
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 5px;
+      word-break: break-all;
+      font-size: 16px;
+    }
+    
+    .file-size {
+      font-size: 14px;
+      color: #666;
+    }
+    
+    .file-input {
+      display: none;
+    }
+    
+    .remove-file {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: #dc3545;
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 35px;
+      height: 35px;
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
+    }
+    
+    .upload-area.has-file .remove-file {
+      display: flex;
+    }
+    
+    .remove-file:hover {
+      background: #c82333;
+      transform: scale(1.1);
+    }
+    
+    /* 수신자 정보 섹션 */
+    .recipients-section {
+      margin-bottom: 25px;
+      padding: 20px;
+      border: 2px solid #e9ecef;
+      border-radius: 10px;
+      background: #f8f9fa;
+    }
+    
+    .recipients-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 15px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .recipients-display {
+      display: none;
+      margin-top: 15px;
+    }
+    
+    .recipients-display.show {
+      display: block;
+    }
+    
+    .recipient-item {
+      padding: 10px;
+      border: 1px solid #dee2e6;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      background: white;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .recipient-info {
+      flex: 1;
+    }
+    
+    .recipient-name {
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 2px;
+    }
+    
+    .recipient-email {
+      font-size: 12px;
+      color: #666;
+      font-family: 'Courier New', monospace;
+    }
+    
+    .recipient-order {
+      background: #dc3545;
+      color: white;
+      padding: 4px 8px;
+      border-radius: 12px;
+      font-size: 10px;
+      font-weight: 600;
+    }
+    
+    /* 버튼 그룹 */
+    .button-group {
+      display: flex;
+      gap: 15px;
+      justify-content: center;
+      margin-top: 30px;
+      flex-wrap: wrap;
+    }
+    
+    .button {
+      padding: 15px 30px;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    .button.primary {
+      background: linear-gradient(135deg, #dc3545 0%, #fd7e14 100%);
+      color: white;
+    }
+    
+    .button.primary:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(220, 53, 69, 0.4);
+    }
+    
+    .button.secondary {
+      background: #6c757d;
+      color: white;
+    }
+    
+    .button.secondary:hover:not(:disabled) {
+      background: #5a6268;
+    }
+    
+    .button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    /* 로딩 및 메시지 */
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 30px;
+    }
+    
+    .loading.show {
+      display: block;
+    }
+    
+    .spinner {
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #dc3545;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 20px;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    .message {
+      padding: 20px;
+      border-radius: 10px;
+      margin-top: 20px;
+      display: none;
+      animation: slideIn 0.3s ease;
+    }
+    
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    .message.success {
+      background: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+      display: block;
+    }
+    
+    .message.error {
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+      display: block;
+    }
+    
+    .message.info {
+      background: #d1ecf1;
+      color: #0c5460;
+      border: 1px solid #bee5eb;
+      display: block;
+    }
+    
+    @media (max-width: 768px) {
+      .container {
+        margin: 10px;
+        border-radius: 10px;
+      }
+      
+      .content {
+        padding: 20px;
+      }
+      
+      .upload-area {
+        padding: 30px 20px;
+        min-height: 150px;
+      }
+      
+      .upload-icon {
+        font-size: 48px;
+      }
+      
+      .upload-title {
+        font-size: 20px;
+      }
+      
+      .button-group {
+        flex-direction: column;
+      }
+      
+      .button {
+        width: 100%;
+        justify-content: center;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>📧 이메일 전송기</h1>
+      <p>엑셀 파일을 드래그해서 자동으로 출고요청 이메일 전송</p>
+    </div>
+    
+    <div class="content">
+      <!-- 날짜 선택 섹션 -->
+      <div class="date-section">
+        <div class="date-title">
+          📅 출고 날짜 지정
+        </div>
+        <div class="date-input-group">
+          <input type="text" id="dateInput" class="date-input" placeholder="0809" maxlength="4" pattern="[0-9]{4}">
+          <button class="date-today-btn" onclick="setTodayDate()">📅 오늘</button>
+          <div class="date-help">
+            MMDD 형식 (예: 0809)<br>
+            이메일 제목에 표시될 날짜입니다
+          </div>
+        </div>
+      </div>
+      
+      <!-- 드래그 앤 드롭 영역 -->
+      <div class="upload-section">
+        <div class="section-title">
+          📂 엑셀 파일 업로드
+        </div>
+        
+        <div class="upload-area" id="uploadArea">
+          <button class="remove-file" onclick="removeFile()">✕</button>
+          <div class="upload-icon">📊</div>
+          <div class="upload-title">간편식 수기송장 엑셀 파일</div>
+          <div class="upload-description">파일을 여기에 드래그하거나 클릭하여 선택</div>
+          <div class="upload-hint">xlsx, xls 파일만 지원</div>
+          <input type="file" id="fileInput" class="file-input" accept=".xlsx,.xls">
+          
+          <div class="file-info" id="fileInfo">
+            <div class="file-name" id="fileName"></div>
+            <div class="file-size" id="fileSize"></div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 수신자 정보 섹션 -->
+      <div class="recipients-section">
+        <div class="recipients-title">
+          👥 이메일 수신자 (이메일_설정 시트 기준)
+        </div>
+        <button class="button secondary" onclick="loadRecipients()" id="loadRecipientsBtn">
+          <span>📋</span> 수신자 목록 확인
+        </button>
+        
+        <div class="recipients-display" id="recipientsDisplay">
+          <!-- 수신자 목록이 여기에 표시됩니다 -->
+        </div>
+      </div>
+      
+      <div class="button-group">
+        <button class="button primary" onclick="sendEmail()" id="sendEmailBtn" disabled>
+          <span>🚀</span> 출고요청 이메일 전송
+        </button>
+      </div>
+      
+      <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <div id="loadingText">처리 중입니다...</div>
+      </div>
+      
+      <div class="message" id="message"></div>
+    </div>
+  </div>
+  
+  <script>
+    let selectedFile = null;
+    let recipients = [];
+    
+    // 날짜 관련 함수들
+    function setTodayDate() {
+      const today = new Date();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      const mmdd = month + day;
+      
+      document.getElementById('dateInput').value = mmdd;
+    }
+    
+    function getSelectedDate() {
+      const dateInput = document.getElementById('dateInput').value.trim();
+      
+      // 입력값 검증
+      if (dateInput && dateInput.length === 4 && /^\d{4}$/.test(dateInput)) {
+        return dateInput;
+      } else if (dateInput && dateInput.length > 0) {
+        showMessage('날짜는 MMDD 형식 4자리 숫자로 입력해주세요 (예: 0809)', 'error');
+        return null;
+      }
+      
+      // 입력값이 없으면 오늘 날짜 사용
+      const today = new Date();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      return month + day;
+    }
+    
+    // 페이지 로드 시 오늘 날짜 설정
+    window.onload = function() {
+      setTodayDate();
+      setupDragAndDrop();
+    };
+    
+    // 드래그 앤 드롭 설정
+    function setupDragAndDrop() {
+      const uploadArea = document.getElementById('uploadArea');
+      const fileInput = document.getElementById('fileInput');
+      
+      // 클릭 이벤트
+      uploadArea.addEventListener('click', function(e) {
+        if (e.target.className !== 'remove-file') {
+          fileInput.click();
+        }
+      });
+      
+      // 파일 선택 이벤트
+      fileInput.addEventListener('change', function(e) {
+        handleFile(e.target.files[0]);
+      });
+      
+      // 드래그 앤 드롭 이벤트
+      uploadArea.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        uploadArea.classList.add('dragover');
+      });
+      
+      uploadArea.addEventListener('dragleave', function() {
+        uploadArea.classList.remove('dragover');
+      });
+      
+      uploadArea.addEventListener('drop', function(e) {
+        e.preventDefault();
+        uploadArea.classList.remove('dragover');
+        
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+          handleFile(files[0]);
+        }
+      });
+    }
+    
+    // 파일 처리
+    function handleFile(file) {
+      if (!file) return;
+      
+      // 파일 확장자 확인
+      const validExtensions = ['.xlsx', '.xls'];
+      const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+      
+      if (!validExtensions.includes(fileExtension)) {
+        showMessage('엑셀 파일(.xlsx, .xls)만 업로드 가능합니다.', 'error');
+        return;
+      }
+      
+      selectedFile = file;
+      
+      // 파일 정보 표시
+      document.getElementById('fileName').textContent = '📄 ' + file.name;
+      document.getElementById('fileSize').textContent = formatFileSize(file.size);
+      document.getElementById('fileInfo').classList.add('show');
+      document.getElementById('uploadArea').classList.add('has-file');
+      
+      updateButtonStates();
+      clearMessage();
+    }
+    
+    // 파일 제거
+    function removeFile() {
+      selectedFile = null;
+      document.getElementById('fileInfo').classList.remove('show');
+      document.getElementById('uploadArea').classList.remove('has-file');
+      document.getElementById('fileInput').value = '';
+      updateButtonStates();
+    }
+    
+    // 버튼 상태 업데이트
+    function updateButtonStates() {
+      const sendBtn = document.getElementById('sendEmailBtn');
+      sendBtn.disabled = !selectedFile || recipients.length === 0;
+    }
+    
+    // 파일 크기 포맷
+    function formatFileSize(bytes) {
+      if (bytes === 0) return '0 Bytes';
+      const k = 1024;
+      const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+    }
+    
+    // 수신자 목록 로드
+    function loadRecipients() {
+      showMessage('수신자 목록을 불러오고 있습니다...', 'info');
+      
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (result.success) {
+            recipients = result.recipients;
+            displayRecipients(result.recipients);
+            showMessage(`📧 ${result.recipients.length}명의 수신자를 불러왔습니다. (체크박스 선택된 사용자만)`, 'success');
+            updateButtonStates();
+          } else {
+            showMessage(`수신자 불러오기 실패: ${result.error}`, 'error');
+            recipients = [];
+          }
+        })
+        .withFailureHandler(function(error) {
+          showMessage(`수신자 불러오기 실패: ${error}`, 'error');
+          recipients = [];
+        })
+        .getEmailRecipients();
+    }
+    
+    // 수신자 목록 표시
+    function displayRecipients(recipientsList) {
+      const display = document.getElementById('recipientsDisplay');
+      display.innerHTML = '';
+      
+      if (recipientsList.length === 0) {
+        display.innerHTML = '<div style="text-align: center; color: #666; margin-top: 15px;">전송 대상자가 없습니다.<br>이메일_설정 시트에서 전송여부를 체크해주세요.</div>';
+      } else {
+        recipientsList.forEach(recipient => {
+          const item = document.createElement('div');
+          item.className = 'recipient-item';
+          item.innerHTML = `
+            <div class="recipient-info">
+              <div class="recipient-name">${recipient.name}</div>
+              <div class="recipient-email">${recipient.email}</div>
+            </div>
+            <div class="recipient-order">${recipient.order}순위</div>
+          `;
+          display.appendChild(item);
+        });
+      }
+      
+      display.classList.add('show');
+    }
+    
+    // 이메일 전송
+    function sendEmail() {
+      if (!selectedFile) {
+        showMessage('엑셀 파일을 선택해주세요.', 'error');
+        return;
+      }
+      
+      if (recipients.length === 0) {
+        showMessage('수신자가 없습니다. 먼저 수신자 목록을 확인해주세요.', 'error');
+        return;
+      }
+      
+      const targetDate = getSelectedDate();
+      if (targetDate === null) {
+        return;
+      }
+      
+      showLoading('엑셀 파일을 처리하고 이메일을 전송하고 있습니다...');
+      
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const fileData = e.target.result.split(',')[1]; // Base64 데이터만 추출
+        
+        google.script.run
+          .withSuccessHandler(function(result) {
+            hideLoading();
+            
+            if (result.success) {
+              showMessage(`✅ 이메일 전송 완료!\n\n받는 사람: ${result.recipientCount}명\n파일명: ${result.fileName}\n\n출고요청이 성공적으로 전송되었습니다.`, 'success');
+              
+              // 파일 초기화
+              removeFile();
+            } else {
+              showMessage(`이메일 전송 실패: ${result.error}`, 'error');
+            }
+          })
+          .withFailureHandler(function(error) {
+            hideLoading();
+            showMessage(`이메일 전송 실패: ${error}`, 'error');
+          })
+          .processExcelAndSendEmail(fileData, selectedFile.name, targetDate);
+      };
+      
+      reader.readAsDataURL(selectedFile);
+    }
+    
+    // UI 헬퍼 함수들
+    function showLoading(text) {
+      document.getElementById('loading').classList.add('show');
+      document.getElementById('loadingText').textContent = text || '처리 중입니다...';
+      document.querySelectorAll('.button').forEach(button => {
+        button.disabled = true;
+      });
+    }
+    
+    function hideLoading() {
+      document.getElementById('loading').classList.remove('show');
+      document.querySelectorAll('.button').forEach(button => {
+        button.disabled = false;
+      });
+      updateButtonStates();
+    }
+    
+    function showMessage(text, type) {
+      const message = document.getElementById('message');
+      message.textContent = text;
+      message.className = 'message ' + type;
+      
+      if (type === 'success') {
+        setTimeout(clearMessage, 7000);
+      }
+    }
+    
+    function clearMessage() {
+      const message = document.getElementById('message');
+      message.classList.remove('success', 'error', 'info');
+    }
+    
+    // 날짜 입력 필드에서 엔터키 처리
+    document.getElementById('dateInput').addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        if (selectedFile && recipients.length > 0) {
+          sendEmail();
+        }
+      }
+    });
+  </script>
+</body>
+</html>
