@@ -8,33 +8,65 @@
  */
 function setupTriggers() {
   try {
-    // 기존 트리거 제거
-    removeTriggers();
+    // 기존 트리거 제거 (권한 문제로 인해 try-catch 처리)
+    try {
+      removeTriggers();
+    } catch (permissionError) {
+      console.log('기존 트리거 확인 권한 없음, 새 트리거만 생성:', permissionError.toString());
+    }
     
     // 매일 오후 2시 실행 트리거 생성
-    ScriptApp.newTrigger('dailyUpdate')
+    const trigger = ScriptApp.newTrigger('dailyUpdate')
       .timeBased()
       .everyDays(1)
       .atHour(14) // 오후 2시
       .create();
     
-    SpreadsheetApp.getUi().alert('✅ 자동 실행 설정 완료!\n매일 오후 2시에 싸이버스카이 데이터가 자동으로 업데이트됩니다.');
+    console.log('새 트리거 생성됨:', trigger.getUniqueId());
+    
+    SpreadsheetApp.getUi().alert('✅ 자동 실행 설정 완료!\n매일 오후 2시에 싸이버스카이 데이터가 자동으로 업데이트됩니다.\n\n참고: 기존 트리거가 있다면 Google Apps Script 편집기에서 수동으로 삭제해주세요.');
     
   } catch (error) {
-    SpreadsheetApp.getUi().alert('❌ 트리거 설정 실패: ' + error.toString());
+    console.error('트리거 설정 실패:', error);
+    SpreadsheetApp.getUi().alert('❌ 트리거 설정 실패: ' + error.toString() + '\n\nGoogle Apps Script 편집기에서 직접 트리거를 설정해보세요.');
   }
 }
 
 /**
- * 트리거 제거
+ * 트리거 제거 (권한이 있는 경우에만)
  */
 function removeTriggers() {
-  const triggers = ScriptApp.getProjectTriggers();
-  triggers.forEach(trigger => {
-    if (trigger.getHandlerFunction() === 'dailyUpdate') {
-      ScriptApp.deleteTrigger(trigger);
-    }
-  });
+  try {
+    const triggers = ScriptApp.getProjectTriggers();
+    let removedCount = 0;
+    
+    triggers.forEach(trigger => {
+      if (trigger.getHandlerFunction() === 'dailyUpdate') {
+        ScriptApp.deleteTrigger(trigger);
+        removedCount++;
+        console.log('트리거 삭제됨:', trigger.getUniqueId());
+      }
+    });
+    
+    console.log(`총 ${removedCount}개의 기존 트리거 삭제 완료`);
+    return { success: true, removedCount };
+    
+  } catch (error) {
+    console.error('트리거 제거 실패 (권한 부족 가능성):', error.toString());
+    throw error; // 상위 함수에서 처리하도록
+  }
+}
+
+/**
+ * 수동으로 트리거 제거 (메뉴에서 실행 가능)
+ */
+function manualRemoveTriggers() {
+  try {
+    const result = removeTriggers();
+    SpreadsheetApp.getUi().alert(`✅ 트리거 제거 완료!\n삭제된 트리거: ${result.removedCount}개`);
+  } catch (error) {
+    SpreadsheetApp.getUi().alert(`❌ 트리거 제거 실패: ${error.toString()}\n\nGoogle Apps Script 편집기 → 왼쪽 사이드바 → 트리거(⏰) 메뉴에서 수동으로 삭제해주세요.`);
+  }
 }
 
 /**
