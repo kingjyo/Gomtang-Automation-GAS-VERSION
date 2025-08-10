@@ -432,11 +432,10 @@ const CoupangProcessor = {
         }
       }
       
-      // 새 제품들을 시트에 추가
+      // 새 제품들을 정렬된 위치에 삽입
       if (newProductsToAdd.length > 0) {
-        const lastRow = verificationSheet.getLastRow();
-        verificationSheet.getRange(lastRow + 1, 1, newProductsToAdd.length, newProductsToAdd[0].length).setValues(newProductsToAdd);
-        console.log(`${newProductsToAdd.length}개 신규 쿠팡 제품 추가`);
+        this.insertNewProductsInSortedOrder(verificationSheet, newProductsToAdd);
+        console.log(`${newProductsToAdd.length}개 신규 쿠팡 제품을 정렬된 위치에 추가`);
       }
       
       const totalProcessed = updatedCount + newProductsToAdd.length;
@@ -484,7 +483,7 @@ const CoupangProcessor = {
   },
 
   /**
-   * 정규화된 제품명을 표시용 이름으로 변환
+   * 정규화된 제품명을 표시용 이름으로 변환 (괄호 앞 공백 포함)
    */
   getDisplayNameFromNormalized: function(normalizedName) {
     const displayMap = {
@@ -496,6 +495,89 @@ const CoupangProcessor = {
     };
     
     return displayMap[normalizedName] || normalizedName;
+  },
+
+  /**
+   * 제품 타입에 따른 정렬 우선순위 반환
+   */
+  getProductSortPriority: function(normalizedName) {
+    const priorities = {
+      '사골고기곰탕5개입': 1,
+      '사골곰탕5개입': 2,
+      '사골곰탕10개입': 3,
+      '사골곰탕20개입': 4,
+      '육포5개입': 5
+    };
+    
+    return priorities[normalizedName] || 999;
+  },
+
+  /**
+   * 새 쿠팡 제품을 정렬된 위치에 삽입
+   */
+  insertNewProductsInSortedOrder: function(verificationSheet, newProductsToAdd) {
+    console.log('=== 정렬된 위치에 새 제품 삽입 시작 ===');
+    
+    if (newProductsToAdd.length === 0) {
+      console.log('추가할 제품 없음');
+      return;
+    }
+    
+    // 새 제품들을 우선순위에 따라 정렬
+    newProductsToAdd.sort((a, b) => {
+      const normalizedA = this.normalizeCoupangProductName(a[1]);
+      const normalizedB = this.normalizeCoupangProductName(b[1]);
+      const priorityA = this.getProductSortPriority(normalizedA);
+      const priorityB = this.getProductSortPriority(normalizedB);
+      return priorityA - priorityB;
+    });
+    
+    const data = verificationSheet.getDataRange().getValues();
+    let insertedCount = 0;
+    
+    for (const newProduct of newProductsToAdd) {
+      const newProductNormalized = this.normalizeCoupangProductName(newProduct[1]);
+      const newProductPriority = this.getProductSortPriority(newProductNormalized);
+      
+      // 삽입할 위치 찾기
+      let insertRowIndex = data.length; // 기본값: 맨 아래
+      
+      for (let i = 1; i < data.length; i++) { // 헤더 제외
+        const existingProductName = String(data[i][1] || '').trim();
+        if (!existingProductName) continue;
+        
+        const existingNormalized = this.normalizeCoupangProductName(existingProductName);
+        const existingPriority = this.getProductSortPriority(existingNormalized);
+        
+        if (newProductPriority < existingPriority) {
+          insertRowIndex = i;
+          break;
+        } else if (newProductPriority === existingPriority) {
+          // 같은 타입이면 그 그룹의 마지막 위치에 삽입
+          let j = i;
+          while (j < data.length && 
+                 this.getProductSortPriority(this.normalizeCoupangProductName(String(data[j][1] || '').trim())) === existingPriority) {
+            j++;
+          }
+          insertRowIndex = j;
+          break;
+        }
+      }
+      
+      console.log(`"${newProduct[1]}" 제품을 ${insertRowIndex + 1}번째 행에 삽입`);
+      
+      // 행 삽입
+      verificationSheet.insertRowAfter(insertRowIndex);
+      
+      // 데이터 입력
+      verificationSheet.getRange(insertRowIndex + 1, 1, 1, newProduct.length).setValues([newProduct]);
+      
+      // data 배열도 업데이트 (다음 삽입을 위해)
+      data.splice(insertRowIndex, 0, newProduct);
+      insertedCount++;
+    }
+    
+    console.log(`✅ ${insertedCount}개 제품을 정렬된 위치에 삽입 완료`);
   }
 };
 
