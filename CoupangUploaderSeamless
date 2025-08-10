@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>쿠팡 데이터 업로더 (통합 워크플로우)</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        
+        h2 {
+            color: #4a5568;
+            text-align: center;
+            margin-bottom: 25px;
+            font-size: 24px;
+        }
+        
+        .workflow-info {
+            background: #e8f5e8;
+            border: 2px solid #48bb78;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 25px;
+            text-align: center;
+        }
+        
+        .workflow-info strong {
+            color: #2d3748;
+            font-size: 16px;
+        }
+        
+        .upload-section {
+            border: 2px dashed #cbd5e0;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 20px;
+            background: #f7fafc;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .upload-section.drag-over {
+            border-color: #48bb78;
+            background: #e8f5e8;
+            transform: scale(1.02);
+        }
+        
+        .upload-section:hover {
+            border-color: #a0aec0;
+            background: #edf2f7;
+        }
+        
+        input[type="file"] {
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+        
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+        
+        .upload-btn {
+            background: #48bb78;
+            color: white;
+        }
+        
+        .upload-btn:hover {
+            background: #38a169;
+            transform: translateY(-2px);
+        }
+        
+        .upload-btn:disabled {
+            background: #a0aec0;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .cancel-btn {
+            background: #e53e3e;
+            color: white;
+        }
+        
+        .cancel-btn:hover {
+            background: #c53030;
+            transform: translateY(-2px);
+        }
+        
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 6px;
+            text-align: center;
+            font-weight: bold;
+        }
+        
+        .status.processing {
+            background: #fef5e7;
+            color: #dd6b20;
+            border: 1px solid #f6ad55;
+        }
+        
+        .status.success {
+            background: #f0fff4;
+            color: #38a169;
+            border: 1px solid #68d391;
+        }
+        
+        .status.error {
+            background: #fed7d7;
+            color: #e53e3e;
+            border: 1px solid #fc8181;
+        }
+        
+        .progress-steps {
+            background: #edf2f7;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+            font-size: 14px;
+        }
+        
+        .progress-steps h4 {
+            margin: 0 0 10px 0;
+            color: #2d3748;
+        }
+        
+        .progress-steps ol {
+            margin: 0;
+            padding-left: 20px;
+        }
+        
+        .progress-steps li {
+            margin-bottom: 5px;
+            color: #4a5568;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>🛍️ 쿠팡 데이터 업로더</h2>
+        
+        <div class="workflow-info">
+            <strong>✅ 검산까지 완료!</strong><br>
+            엑셀 파일을 업로드하면 자동으로 나머지 과정이 실행됩니다.
+        </div>
+        
+        <div class="upload-section" id="uploadSection" onclick="document.getElementById('fileInput').click()">
+            <p><strong>📁 쿠팡 엑셀 파일을 업로드하세요</strong></p>
+            <p style="font-size: 18px; color: #2d3748; margin: 20px 0;">
+                🖱️ <strong>클릭</strong> 또는 <strong>파일을 여기로 드래그</strong>
+            </p>
+            <input type="file" id="fileInput" accept=".xlsx,.xls" style="display: none;" />
+            <p style="font-size: 14px; color: #4a5568; margin: 15px 0;">
+                💡 <strong>팁:</strong> 쿠팡에서 다운받은 엑셀 파일을 바로 끌어다 놓으세요!
+            </p>
+            <p style="font-size: 12px; color: #718096; margin-top: 15px;">
+                지원 파일 형식: .xlsx, .xls (쿠팡 배송 데이터)
+            </p>
+            <div id="fileName" style="margin-top: 15px; font-weight: bold; color: #2d3748; background: #e2e8f0; padding: 10px; border-radius: 6px; display: none;"></div>
+        </div>
+        
+        <div class="button-group">
+            <button class="upload-btn" id="uploadBtn" onclick="uploadFile()">
+                🚀 업로드 및 자동 진행
+            </button>
+            <button class="cancel-btn" onclick="closeDialog()">
+                ❌ 취소
+            </button>
+        </div>
+        
+        <div id="status" class="status" style="display: none;"></div>
+        
+        <div class="progress-steps">
+            <h4>🔄 업로드 후 자동 실행 과정:</h4>
+            <ol>
+                <li>쿠팡 데이터 처리 및 검산결과 업데이트</li>
+                <li>품목별 시트 생성</li>
+                <li>엑셀 파일 생성</li>
+                <li>자동 이메일 전송</li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        let isProcessing = false;
+        let selectedFile = null;
+
+        // 드래그 앤 드롭 초기화
+        function initializeDragAndDrop() {
+            const uploadSection = document.getElementById('uploadSection');
+            
+            // 업로드 섹션 이벤트
+            uploadSection.addEventListener('dragenter', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.classList.add('drag-over');
+                console.log('드래그 진입:', e.dataTransfer.files.length);
+            });
+            
+            uploadSection.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                e.dataTransfer.dropEffect = 'copy';
+                this.classList.add('drag-over');
+            });
+            
+            uploadSection.addEventListener('dragleave', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                // 실제로 영역을 벗어났는지 확인
+                if (!e.currentTarget.contains(e.relatedTarget)) {
+                    this.classList.remove('drag-over');
+                }
+            });
+            
+            uploadSection.addEventListener('drop', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.classList.remove('drag-over');
+                
+                console.log('파일 드롭됨:', e.dataTransfer.files.length);
+                
+                if (isProcessing) {
+                    showStatus('이미 처리 중입니다. 잠시 기다려주세요.', 'error');
+                    return;
+                }
+                
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    handleFileSelection(files[0]);
+                } else {
+                    showStatus('파일을 찾을 수 없습니다.', 'error');
+                }
+            });
+        }
+        
+        // 파일 선택 처리
+        function handleFileSelection(file) {
+            console.log('파일 선택됨:', file.name, 'Size:', file.size, 'Type:', file.type);
+            
+            if (!file.name.match(/\.(xlsx|xls)$/i)) {
+                showStatus('❌ Excel 파일만 업로드 가능합니다. (.xlsx, .xls)', 'error');
+                return;
+            }
+            
+            selectedFile = file;
+            const fileNameDiv = document.getElementById('fileName');
+            fileNameDiv.innerHTML = `📄 <strong>선택된 파일:</strong><br>${file.name}<br><small>크기: ${(file.size/1024/1024).toFixed(2)} MB</small>`;
+            fileNameDiv.style.display = 'block';
+            
+            showStatus('✅ 파일이 선택되었습니다! "업로드 및 자동 진행" 버튼을 클릭하세요.', 'success');
+            document.getElementById('uploadBtn').focus();
+        }
+
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = 'status ' + type;
+            statusDiv.style.display = 'block';
+        }
+
+        function uploadFile() {
+            if (isProcessing) return;
+            
+            // 선택된 파일이 있는지 확인 (드래그 드롭 또는 파일 선택)
+            const file = selectedFile || document.getElementById('fileInput').files[0];
+            
+            if (!file) {
+                showStatus('파일을 선택해주세요.', 'error');
+                return;
+            }
+            
+            if (!file.name.match(/\.(xlsx|xls)$/i)) {
+                showStatus('Excel 파일만 업로드 가능합니다.', 'error');
+                return;
+            }
+            
+            isProcessing = true;
+            document.getElementById('uploadBtn').disabled = true;
+            document.getElementById('uploadBtn').textContent = '⏳ 처리 중...';
+            showStatus('파일을 업로드하고 처리하는 중입니다...', 'processing');
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const base64Data = e.target.result.split(',')[1];
+                
+                // 쿠팡 파일 처리 및 자동으로 나머지 과정 실행
+                google.script.run
+                    .withSuccessHandler(onUploadSuccess)
+                    .withFailureHandler(onUploadError)
+                    .processCoupangFileAndExecuteRemaining(base64Data, file.name);
+            };
+            
+            reader.readAsDataURL(file);
+        }
+        
+        function onUploadSuccess(result) {
+            isProcessing = false;
+            
+            if (result.success) {
+                showStatus('✅ 성공! 모든 과정이 완료되었습니다. 출고 이메일이 발송되었습니다.', 'success');
+                
+                setTimeout(() => {
+                    google.script.host.close();
+                }, 3000);
+            } else {
+                showStatus('❌ 오류: ' + result.error, 'error');
+                document.getElementById('uploadBtn').disabled = false;
+                document.getElementById('uploadBtn').textContent = '🚀 업로드 및 자동 진행';
+            }
+        }
+        
+        function onUploadError(error) {
+            isProcessing = false;
+            showStatus('❌ 업로드 오류: ' + error.toString(), 'error');
+            document.getElementById('uploadBtn').disabled = false;
+            document.getElementById('uploadBtn').textContent = '🚀 업로드 및 자동 진행';
+        }
+        
+        function closeDialog() {
+            if (isProcessing) {
+                if (!confirm('현재 처리 중입니다. 정말 닫으시겠습니까?')) {
+                    return;
+                }
+            }
+            google.script.host.close();
+        }
+        
+        // Enter 키로 업로드
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !isProcessing) {
+                uploadFile();
+            }
+        });
+        
+        // 파일 선택 시 자동 포커스
+        document.getElementById('fileInput').addEventListener('change', function() {
+            if (this.files[0]) {
+                handleFileSelection(this.files[0]);
+            }
+        });
+        
+        // 페이지 로드 시 드래그 앤 드롭 초기화
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeDragAndDrop();
+        });
+        
+        // 페이지 전체에서 기본 드래그 드롭 동작 방지 (업로드 섹션 제외)
+        document.addEventListener('dragover', function(e) {
+            // 업로드 섹션이 아닌 경우에만 기본 동작 방지
+            if (!e.target.closest('#uploadSection')) {
+                e.preventDefault();
+                e.dataTransfer.effectAllowed = 'none';
+                e.dataTransfer.dropEffect = 'none';
+            }
+        });
+        
+        document.addEventListener('drop', function(e) {
+            // 업로드 섹션이 아닌 경우에만 기본 동작 방지
+            if (!e.target.closest('#uploadSection')) {
+                e.preventDefault();
+                console.log('페이지 외부 드롭 방지됨');
+            }
+        });
+        
+        document.addEventListener('dragenter', function(e) {
+            // 업로드 섹션이 아닌 경우에만 기본 동작 방지
+            if (!e.target.closest('#uploadSection')) {
+                e.preventDefault();
+            }
+        });
+    </script>
+</body>
+</html>

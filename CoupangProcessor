@@ -582,6 +582,45 @@ const CoupangProcessor = {
 };
 
 /**
+ * 현재 작업 중인 날짜 가져오기 (스프레드시트의 시트명에서 추출)
+ */
+function getCurrentWorkingDate() {
+  try {
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    const sheets = spreadsheet.getSheets();
+    
+    // 수기송장 시트에서 날짜 추출
+    for (const sheet of sheets) {
+      const name = sheet.getName();
+      if (name.includes('_간편식_수기송장') && !name.startsWith('TEST_')) {
+        const datePart = name.split('_')[0];
+        if (datePart.length === 8 && /^\d{8}$/.test(datePart)) {
+          return datePart.substring(4); // YYYYMMDD에서 MMDD 추출
+        }
+      }
+    }
+    
+    // 검산결과 시트에서 날짜 추출
+    for (const sheet of sheets) {
+      const name = sheet.getName();
+      if (name.includes('_검산결과') && !name.startsWith('TEST_')) {
+        const datePart = name.split('_')[0];
+        if (datePart.length === 8 && /^\d{8}$/.test(datePart)) {
+          return datePart.substring(4); // YYYYMMDD에서 MMDD 추출
+        }
+      }
+    }
+    
+    // 기본값: 오늘 날짜
+    return getTodayShortDate();
+    
+  } catch (error) {
+    console.error('getCurrentWorkingDate 오류:', error);
+    return getTodayShortDate();
+  }
+}
+
+/**
  * HTML에서 호출할 전역 함수 (CoupangUploader용)
  */
 function processCoupangFile(fileData, fileName) {
@@ -598,6 +637,81 @@ function processCoupangFile(fileData, fileName) {
     console.error('ERROR in processCoupangFile:', error.toString());
     console.error('Error stack:', error.stack);
     console.log('=== Function End: processCoupangFile FAILED ===');
+    return { success: false, error: error.toString() };
+  }
+}
+
+/**
+ * 쿠팡 파일 처리 후 자동으로 나머지 과정 실행 (통합 워크플로우용)
+ */
+function processCoupangFileAndExecuteRemaining(fileData, fileName) {
+  console.log('=== Function Start: processCoupangFileAndExecuteRemaining ===');
+  console.log('Parameters:', { fileName });
+  
+  try {
+    // 1. 쿠팡 파일 처리
+    const coupangResult = CoupangProcessor.processCoupangFile(fileData, fileName);
+    logUpdate('🛍️ 쿠팡 데이터 처리', coupangResult);
+    
+    if (!coupangResult.success) {
+      console.error('쿠팡 파일 처리 실패:', coupangResult.error);
+      return { success: false, error: '쿠팡 파일 처리 실패: ' + coupangResult.error };
+    }
+    
+    // 2. 품목별 분할 (필수) - 현재 작업 중인 날짜 사용
+    const currentDate = getCurrentWorkingDate();
+    const splitResult = ProductSplitter.splitByProduct(currentDate);
+    logUpdate('📊 품목별 분할', splitResult);
+    
+    if (!splitResult.success) {
+      logUpdate('❌ 품목별 분할 실패 - 워크플로우 중단', splitResult);
+      return { success: false, error: '품목별 분할 실패: ' + splitResult.error };
+    }
+    
+    // 3. 품목별 시트 생성 및 엑셀 다운로드 (동일한 날짜 사용)
+    const downloadResult = ProductDownloader.downloadProductSheets(currentDate);
+    logUpdate('📥 품목별 엑셀 생성', downloadResult);
+    
+    if (!downloadResult.success) {
+      logUpdate('⚠️ 통합 워크플로우 중단: 엑셀 생성 실패', downloadResult);
+      return { success: false, error: '엑셀 생성 실패: ' + downloadResult.error };
+    }
+    
+    // 4. 자동 이메일 전송
+    const emailResult = sendEmailWithProductSheets();
+    logUpdate('📧 자동 이메일 전송', emailResult);
+    
+    if (emailResult.success) {
+      logUpdate('🎉 통합 워크플로우 전체 완료!', {
+        success: true,
+        completedSteps: [
+          '검산완료',
+          '쿠팡처리',
+          '품목별생성',
+          '엑셀생성',
+          '이메일전송'
+        ],
+        time: new Date().toLocaleString('ko-KR')
+      });
+      
+      console.log('=== Function End: processCoupangFileAndExecuteRemaining SUCCESS ===');
+      return { 
+        success: true, 
+        message: '모든 과정이 완료되었습니다. 출고 요청 이메일이 발송되었습니다.' 
+      };
+    } else {
+      logUpdate('⚠️ 이메일 전송 실패하지만 데이터 처리는 완료', emailResult);
+      return { 
+        success: false, 
+        error: '이메일 전송 실패: ' + emailResult.error 
+      };
+    }
+    
+  } catch (error) {
+    console.error('ERROR in processCoupangFileAndExecuteRemaining:', error.toString());
+    console.error('Error stack:', error.stack);
+    logUpdate('❌ 통합 워크플로우 오류', { success: false, error: error.toString() });
+    console.log('=== Function End: processCoupangFileAndExecuteRemaining FAILED ===');
     return { success: false, error: error.toString() };
   }
 }

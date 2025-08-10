@@ -156,9 +156,12 @@ function onOpen() {
     .addItem('📧 이메일 전송기 열기', 'openEmailSender')
     .addItem('📁 드라이브로 초기 설정', 'openGooglePicker')
     .addSeparator()
-    .addItem('⏰ 자동 실행 설정', 'setupTriggers')
-    .addItem('🚀 완전 자동화 트리거 설정', 'setupCompleteAutomationTrigger')
-    .addItem('▶️ 완전 자동화 수동 실행', 'manualCompleteAutomation')
+    .addItem('🚀 통합 워크플로우 실행 (추천)', 'executeSeamlessWorkflow')
+    .addSeparator()
+    .addItem('⏰ 자동 실행 설정 (기본)', 'setupTriggers')
+    .addItem('🔄 반자동화 트리거 설정', 'setupSemiAutomationTrigger')
+    .addItem('▶️ Part 1 실행 (검산까지)', 'executePart1Pipeline')
+    .addItem('▶️ Part 2 실행 (쿠팡 업로드 후)', 'executePart2Pipeline')
     .addItem('🔧 설정', 'openSettings')
     .addItem('📧 이메일 설정 시트 생성', 'createEmailSettingsSheet')
     .addSeparator()
@@ -167,6 +170,9 @@ function onOpen() {
     .addItem('⚡ 테스트 - 즉시 실행 (시간무관)', 'immediateTest')
     .addItem('📅 테스트 - 날짜 지정 (과거데이터)', 'testWithDate')
     .addItem('🧪 테스트 - 템플릿 시트 초기화', 'clearTemplates')
+    .addSeparator()
+    .addItem('🗑️ 일일 시트 정리', 'cleanupDailySheets')
+    .addItem('📅 날짜별 시트 정리', 'cleanupDateSheets')
     .addToUi();
 }
 
@@ -386,15 +392,50 @@ function splitByProduct() {
   // 설정 초기화
   initializeConfig();
   
+  const ui = SpreadsheetApp.getUi();
+  
+  // 날짜 선택 옵션
+  const response = ui.alert(
+    '📅 날짜 선택',
+    '어떤 날짜의 데이터로 품목별 시트를 생성하시겠습니까?\n\n' +
+    '예: 자동 추출 (기존 시트에서 날짜 찾기)\n' +
+    '아니오: 날짜 직접 지정',
+    ui.ButtonSet.YES_NO_CANCEL
+  );
+  
+  if (response === ui.Button.CANCEL) {
+    return;
+  }
+  
+  let targetDate = null;
+  if (response === ui.Button.NO) {
+    // 날짜 직접 입력
+    const dateResponse = ui.prompt(
+      '날짜 입력',
+      'MMDD 형식으로 입력하세요 (예: 0807, 0811)',
+      ui.ButtonSet.OK_CANCEL
+    );
+    
+    if (dateResponse.getSelectedButton() !== ui.Button.OK) {
+      return;
+    }
+    
+    targetDate = dateResponse.getResponseText().trim();
+    if (!/^\d{4}$/.test(targetDate)) {
+      ui.alert('❌ 잘못된 날짜 형식입니다. MMDD 형식으로 입력해주세요.');
+      return;
+    }
+  }
+  
   try {
-    const result = ProductSplitter.splitByProduct();
+    const result = ProductSplitter.splitByProduct(targetDate);
     if (result.success) {
-      SpreadsheetApp.getUi().alert('✅ 품목별 시트 분리 완료!\n생성된 시트: ' + result.sheets.join(', '));
+      ui.alert('✅ 품목별 시트 분리 완료!\n생성된 시트: ' + result.sheets.join(', '));
     } else {
       throw new Error(result.error);
     }
   } catch (error) {
-    SpreadsheetApp.getUi().alert('❌ 오류: ' + error.toString());
+    ui.alert('❌ 오류: ' + error.toString());
   }
 }
 
@@ -477,6 +518,76 @@ function openSettings() {
     .setHeight(400)
     .setTitle('설정');
   SpreadsheetApp.getUi().showModalDialog(html, '곰탕 출고 자동화 설정');
+}
+
+/**
+ * Part 1 실행 (검산까지 - 날짜 선택 가능)
+ */
+function executePart1Pipeline() {
+  try {
+    const ui = SpreadsheetApp.getUi();
+    
+    // 날짜 선택 옵션
+    const dateResponse = ui.alert(
+      '📅 Part 1 실행 - 날짜 선택',
+      '어떤 날짜의 데이터를 처리하시겠습니까?\n\n' +
+      '예: 오늘 날짜 (자동)\n' +
+      '아니오: 날짜 직접 지정',
+      ui.ButtonSet.YES_NO_CANCEL
+    );
+    
+    if (dateResponse === ui.Button.CANCEL) {
+      return;
+    }
+    
+    let targetDate = null;
+    if (dateResponse === ui.Button.NO) {
+      // 날짜 직접 입력
+      const inputResponse = ui.prompt(
+        '날짜 입력',
+        'MMDD 형식으로 입력하세요 (예: 0807, 0810)\n\nPart 1: 싸이버스카이 → EDI → 검산',
+        ui.ButtonSet.OK_CANCEL
+      );
+      
+      if (inputResponse.getSelectedButton() !== ui.Button.OK) {
+        return;
+      }
+      
+      targetDate = inputResponse.getResponseText().trim();
+      if (!/^\d{4}$/.test(targetDate)) {
+        ui.alert('❌ 잘못된 날짜 형식입니다. MMDD 형식으로 입력해주세요.');
+        return;
+      }
+    }
+    
+    // 실행 확인
+    const confirmResponse = ui.alert(
+      '🔄 Part 1 실행',
+      `Part 1 파이프라인을 실행하시겠습니까?\n\n` +
+      `날짜: ${targetDate || '오늘'}\n\n` +
+      '실행 과정:\n' +
+      '• 싸이버스카이 데이터 수집\n' +
+      '• EDI 데이터 처리\n' +
+      '• 데이터 가공 및 검산\n' +
+      '• 쿠팡 업로드 안내 이메일',
+      ui.ButtonSet.YES_NO
+    );
+    
+    if (confirmResponse === ui.Button.YES) {
+      ui.alert(`🔄 Part 1 파이프라인을 시작합니다.\n날짜: ${targetDate || '오늘'}\n\n업데이트_로그 시트에서 진행상황을 확인하세요.`);
+      
+      // 날짜 지정 Part 1 실행
+      if (targetDate) {
+        semiAutomationPipelineWithDate(targetDate);
+      } else {
+        semiAutomationPipeline();
+      }
+    }
+    
+  } catch (error) {
+    console.error('Part 1 실행 오류:', error);
+    SpreadsheetApp.getUi().alert('❌ Part 1 실행 오류: ' + error.toString());
+  }
 }
 
 /**

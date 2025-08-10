@@ -6,22 +6,38 @@
 const ProductSplitter = {
   /**
    * 품목별로 시트 분리
+   * @param {string} targetDate - MMDD 형식의 날짜 (선택적, 없으면 자동 추출)
    */
-  splitByProduct: function() {
+  splitByProduct: function(targetDate) {
     try {
       const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
       
-      // 날짜 추출
-      let datePrefix = getTodayDate();
-      const sheets = spreadsheet.getSheets();
-      
-      for (const sheet of sheets) {
-        const name = sheet.getName();
-        if ((name.includes(' 간편식 수기송장') && !name.startsWith('TEST_')) ||
-            (name.includes('_간편식_싸이버스카이') && !name.startsWith('TEST_'))) {
-          datePrefix = name.split(/[ _]/)[0];
-          break;
+      // 날짜 처리
+      let datePrefix;
+      if (targetDate) {
+        // MMDD를 YYYYMMDD로 변환
+        if (targetDate.length === 4) {
+          datePrefix = new Date().getFullYear() + targetDate;
+        } else if (targetDate.length === 8) {
+          datePrefix = targetDate;
+        } else {
+          throw new Error('잘못된 날짜 형식입니다. MMDD 또는 YYYYMMDD 형식으로 입력하세요.');
         }
+        console.log(`지정된 날짜로 품목별 시트 생성: ${datePrefix}`);
+      } else {
+        // 기존 시트에서 날짜 추출
+        datePrefix = getTodayDate();
+        const sheets = spreadsheet.getSheets();
+        
+        for (const sheet of sheets) {
+          const name = sheet.getName();
+          if ((name.includes(' 간편식 수기송장') && !name.startsWith('TEST_')) ||
+              (name.includes('_간편식_수기송장') && !name.startsWith('TEST_'))) {
+            datePrefix = name.split(/[ _]/)[0];
+            break;
+          }
+        }
+        console.log(`자동 추출된 날짜로 품목별 시트 생성: ${datePrefix}`);
       }
       
       const sourceSheetName = datePrefix + '_간편식_수기송장';
