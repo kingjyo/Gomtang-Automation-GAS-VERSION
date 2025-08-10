@@ -308,22 +308,41 @@ const CoupangProcessor = {
       
       console.log(`✅ 검산결과 시트 발견: ${verificationSheetName}`);
       
-      // H열과 I열 헤더 추가/확인
-      const currentYear = new Date().getFullYear();
-      const headerRow = verificationSheet.getRange(1, 1, 1, verificationSheet.getLastColumn() + 2).getValues()[0];
+      // H열과 I열 헤더 추가/확인 및 스타일링
+      const headerRow = verificationSheet.getRange(1, 1, 1, Math.max(verificationSheet.getLastColumn(), 9)).getValues()[0];
       
-      // H열(7)에 "쿠팡" 헤더가 없으면 추가 (데이터 행에는 쿠팡 수량이 들어감)
+      // H열(7)에 "쿠팡" 헤더가 없으면 추가
       if (!headerRow[7] || String(headerRow[7]).trim() !== '쿠팡') {
-        verificationSheet.getRange(1, 8).setValue('쿠팡');
-        console.log('H열에 "쿠팡" 헤더 추가');
+        const headerCell = verificationSheet.getRange(1, 8);
+        headerCell.setValue('쿠팡');
+        
+        // 기존 헤더 스타일과 일치시키기
+        const existingHeaderStyle = verificationSheet.getRange(1, 1);
+        headerCell.setBackground(existingHeaderStyle.getBackground());
+        headerCell.setFontColor(existingHeaderStyle.getFontColor());
+        headerCell.setFontWeight(existingHeaderStyle.getFontWeight());
+        headerCell.setHorizontalAlignment('center');
+        headerCell.setBorder(true, true, true, true, false, false);
+        
+        console.log('H열에 "쿠팡" 헤더 추가 (스타일 적용)');
       }
       
       // I열(8)에 "MMDD 출고수량" 헤더가 없으면 추가
       const mmdd = datePrefix.substring(4); // YYYYMMDD에서 MMDD 추출
       const expectedHeader = `${mmdd} 출고수량`;
       if (!headerRow[8] || String(headerRow[8]).trim() !== expectedHeader) {
-        verificationSheet.getRange(1, 9).setValue(expectedHeader);
-        console.log(`I열에 "${expectedHeader}" 헤더 추가`);
+        const headerCell = verificationSheet.getRange(1, 9);
+        headerCell.setValue(expectedHeader);
+        
+        // 기존 헤더 스타일과 일치시키기
+        const existingHeaderStyle = verificationSheet.getRange(1, 1);
+        headerCell.setBackground(existingHeaderStyle.getBackground());
+        headerCell.setFontColor(existingHeaderStyle.getFontColor());
+        headerCell.setFontWeight(existingHeaderStyle.getFontWeight());
+        headerCell.setHorizontalAlignment('center');
+        headerCell.setBorder(true, true, true, true, false, false);
+        
+        console.log(`I열에 "${expectedHeader}" 헤더 추가 (스타일 적용)`);
       }
       
       // 쿠팡 제품별 수량 계산
@@ -352,7 +371,7 @@ const CoupangProcessor = {
       
       console.log('쿠팡 제품별 수량:', JSON.stringify(coupangProductQuantities, null, 2));
       
-      // 검산결과 시트에서 매칭되는 제품 찾아 업데이트
+      // 검산결과 시트에서 모든 제품에 대해 총 출고수량 계산
       const data = verificationSheet.getDataRange().getValues();
       let updatedCount = 0;
       
@@ -361,23 +380,25 @@ const CoupangProcessor = {
         const verificationProductName = String(row[1] || '').trim(); // B열: 품목명
         
         if (verificationProductName) {
-          const normalizedVerificationProduct = this.normalizeCoupangProductName(verificationProductName);
+          // F열(5): 싸이버스카이 합계 수량 읽기
+          const cyberskyQuantity = parseInt(row[5] || 0);
           
-          if (normalizedVerificationProduct && coupangProductQuantities[normalizedVerificationProduct]) {
-            // F열(5): 싸이버스카이 합계 수량 읽기
-            const cyberskyQuantity = parseInt(row[5] || 0);
-            const coupangQuantity = coupangProductQuantities[normalizedVerificationProduct];
-            const totalQuantity = cyberskyQuantity + coupangQuantity;
-            
-            // H열(7)에 쿠팡 수량 설정
-            verificationSheet.getRange(i + 1, 8).setValue(coupangQuantity);
-            
-            // I열(8)에 총 출고수량 설정
-            verificationSheet.getRange(i + 1, 9).setValue(totalQuantity);
-            
-            console.log(`업데이트: "${verificationProductName}" | 싸이버스카이: ${cyberskyQuantity} + 쿠팡: ${coupangQuantity} = 총: ${totalQuantity}`);
-            updatedCount++;
-          }
+          // 쿠팡 수량 확인
+          const normalizedVerificationProduct = this.normalizeCoupangProductName(verificationProductName);
+          const coupangQuantity = (normalizedVerificationProduct && coupangProductQuantities[normalizedVerificationProduct]) 
+            ? coupangProductQuantities[normalizedVerificationProduct] : 0;
+          
+          // 총 출고수량 계산
+          const totalQuantity = cyberskyQuantity + coupangQuantity;
+          
+          // H열(7)에 쿠팡 수량 설정 (0이어도 설정)
+          verificationSheet.getRange(i + 1, 8).setValue(coupangQuantity);
+          
+          // I열(8)에 총 출고수량 설정 (모든 행에 설정)
+          verificationSheet.getRange(i + 1, 9).setValue(totalQuantity);
+          
+          console.log(`업데이트: "${verificationProductName}" | 싸이버스카이: ${cyberskyQuantity} + 쿠팡: ${coupangQuantity} = 총: ${totalQuantity}`);
+          updatedCount++;
         }
       }
       
