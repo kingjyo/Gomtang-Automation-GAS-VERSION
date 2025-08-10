@@ -574,72 +574,55 @@ const ProductDownloader = {
    * 출고 수량 데이터 수집 (싸이버스카이 + 쿠팡)
    */
   collectShipmentData: function(dateString) {
-    console.log(`=== 출고 데이터 수집: ${dateString} ===`);
+    console.log(`=== 출고 데이터 수집 (싸이버스카이 + 쿠팡): ${dateString} ===`);
     
     try {
       const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
       const shipmentData = {
         '사골고기곰탕5개입': { cybersky: 0, coupang: 0, total: 0 },
+        '사골곰탕5개입': { cybersky: 0, coupang: 0, total: 0 },
         '사골곰탕20개입': { cybersky: 0, coupang: 0, total: 0 },
         '사골곰탕10개입': { cybersky: 0, coupang: 0, total: 0 },
         '육포5개입': { cybersky: 0, coupang: 0, total: 0 }
       };
       
-      // 각 품목별 시트에서 데이터 수집
-      const productSheets = ['사골고기곰탕', '사골곰탕', '육포'];
+      // 1. 싸이버스카이 시트에서 데이터 읽기
+      const cyberskySheetName = `${dateString}_간편식_싸이버스카이`;
+      const cyberskySheet = spreadsheet.getSheetByName(cyberskySheetName);
       
-      for (const product of productSheets) {
-        const sheetName = `${dateString}_${product}`;
-        const sheet = spreadsheet.getSheetByName(sheetName);
-        
-        if (sheet) {
-          console.log(`Processing sheet: ${sheetName}`);
-          const data = sheet.getDataRange().getValues();
-          
-          // 헤더 행 제외하고 처리
-          for (let i = 1; i < data.length; i++) {
-            const row = data[i];
-            
-            // 컬럼 매핑 (실제 컬럼 인덱스에 맞게 조정 필요)
-            const productName = String(row[1] || ''); // B열: 상품명
-            const quantity = parseInt(row[2] || 0); // C열: 수량
-            const memo = String(row[18] || ''); // S열: 메모1 (쿠팡 표시)
-            
-            if (quantity > 0) {
-              // 제품명 정규화 (새로운 분류 기준)
-              let normalizedProduct = '';
-              if (productName.includes('사골고기곰탕') && productName.includes('5개입')) {
-                normalizedProduct = '사골고기곰탕5개입';
-              } else if (productName.includes('사골곰탕') && productName.includes('20개입')) {
-                normalizedProduct = '사골곰탕20개입';
-              } else if (productName.includes('사골곰탕') && productName.includes('10개입')) {
-                normalizedProduct = '사골곰탕10개입';
-              } else if (productName.includes('육포') && productName.includes('5개입')) {
-                normalizedProduct = '육포5개입';
-              }
-              // 5개입이 명시되지 않은 사골고기곰탕은 기본적으로 5개입으로 처리
-              else if (productName.includes('사골고기곰탕')) {
-                normalizedProduct = '사골고기곰탕5개입';
-              }
-              // 개입이 명시되지 않은 육포는 기본적으로 5개입으로 처리
-              else if (productName.includes('육포')) {
-                normalizedProduct = '육포5개입';
-              }
-              
-              if (normalizedProduct && shipmentData[normalizedProduct]) {
-                if (memo.trim() === '쿠팡') {
-                  shipmentData[normalizedProduct].coupang += quantity;
-                } else {
-                  shipmentData[normalizedProduct].cybersky += quantity;
-                }
-                shipmentData[normalizedProduct].total += quantity;
-              }
-            }
-          }
-        }
+      console.log(`🔍 싸이버스카이 시트 찾기: ${cyberskySheetName}`);
+      
+      if (cyberskySheet) {
+        console.log(`✅ 싸이버스카이 시트 발견: ${cyberskySheet.getName()}`);
+        this.processCyberskySheetForProductDownloader(cyberskySheet, shipmentData);
+      } else {
+        console.log(`⚠️ 싸이버스카이 시트 없음: ${cyberskySheetName}`);
       }
       
-      console.log('Shipment data collected:', shipmentData);
+      // 2. 검산결과 시트에서 쿠팡 데이터 읽기
+      const verificationSheetName = `${dateString}_검산결과`;
+      const verificationSheet = spreadsheet.getSheetByName(verificationSheetName);
+      
+      console.log(`🔍 검산결과 시트 찾기: ${verificationSheetName}`);
+      
+      if (verificationSheet) {
+        console.log(`✅ 검산결과 시트 발견: ${verificationSheet.getName()}`);
+        this.processCoupangDataForProductDownloader(verificationSheet, shipmentData);
+      } else {
+        console.log(`⚠️ 검산결과 시트 없음: ${verificationSheetName}`);
+      }
+      
+      // 최종 결과 로깅
+      console.log('📊 최종 출고 데이터:');
+      let totalQuantity = 0;
+      for (const [product, data] of Object.entries(shipmentData)) {
+        if (data.total > 0) {
+          console.log(`  ${product}: 총 ${data.total}개 (싸이버스카이: ${data.cybersky}, 쿠팡: ${data.coupang})`);
+          totalQuantity += data.total;
+        }
+      }
+      console.log(`✅ 총 출고량: ${totalQuantity}개`);
+      
       return {
         success: true,
         data: shipmentData
@@ -652,6 +635,114 @@ const ProductDownloader = {
         error: error.toString()
       };
     }
+  },
+
+  /**
+   * 싸이버스카이 시트 처리 (ProductDownloader용)
+   */
+  processCyberskySheetForProductDownloader: function(cyberskySheet, shipmentData) {
+    console.log('📋 싸이버스카이 시트 데이터 처리 시작 (ProductDownloader)');
+    
+    const data = cyberskySheet.getDataRange().getValues();
+    console.log(`  └─ 시트 크기: ${data.length} 행 x ${data[0] ? data[0].length : 0} 열`);
+    
+    if (data.length <= 1) {
+      console.log(`  └─ ⚠️ 데이터 없음`);
+      return;
+    }
+    
+    // 고정 열 인덱스 사용
+    const productColIndex = 15; // P열: PROD_NAME (0-based index)
+    const quantityColIndex = 19; // T열: ORDERCNT (0-based index)
+    
+    const headers = data[0];
+    console.log(`  └─ 📍 고정 열 사용 - P열(${productColIndex}): ${headers[productColIndex]}, T열(${quantityColIndex}): ${headers[quantityColIndex]}`);
+    
+    let processedRows = 0;
+    
+    // 데이터 행 처리
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const productName = String(row[productColIndex] || '');
+      const quantity = parseInt(row[quantityColIndex] || 0);
+      
+      if (quantity > 0 && productName) {
+        const normalizedProduct = this.normalizeProductNameForProductDownloader(productName);
+        
+        if (normalizedProduct && shipmentData[normalizedProduct]) {
+          shipmentData[normalizedProduct].cybersky += quantity;
+          shipmentData[normalizedProduct].total += quantity;
+          processedRows++;
+        }
+      }
+    }
+    
+    console.log(`✅ 싸이버스카이 처리 완료: ${processedRows}개 행 처리`);
+  },
+
+  /**
+   * 검산결과 시트에서 쿠팡 데이터 처리 (ProductDownloader용)
+   */
+  processCoupangDataForProductDownloader: function(verificationSheet, shipmentData) {
+    console.log('📋 검산결과 시트에서 쿠팡 데이터 처리 시작 (ProductDownloader)');
+    
+    const data = verificationSheet.getDataRange().getValues();
+    console.log(`  └─ 검산결과 시트 크기: ${data.length} 행 x ${data[0] ? data[0].length : 0} 열`);
+    
+    if (data.length <= 1) {
+      console.log(`  └─ ⚠️ 검산결과 시트에 데이터 없음`);
+      return 0;
+    }
+    
+    // H열(7)에 쿠팡 수량이 있는 행들에서 쿠팡 데이터 읽기
+    let coupangCount = 0;
+    
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const productName = String(row[1] || ''); // B열: 품목명
+      const coupangQuantity = parseInt(row[7] || 0); // H열: 쿠팡 수량
+      
+      if (coupangQuantity > 0 && productName) {
+        console.log(`    🛒 쿠팡 데이터 발견: "${productName}" / 쿠팡수량=${coupangQuantity}`);
+        
+        const normalizedProduct = this.normalizeProductNameForProductDownloader(productName);
+        
+        if (normalizedProduct && shipmentData[normalizedProduct]) {
+          shipmentData[normalizedProduct].coupang += coupangQuantity;
+          shipmentData[normalizedProduct].total += coupangQuantity;
+          coupangCount++;
+          
+          console.log(`    ➕ 쿠팡 추가: ${normalizedProduct} +${coupangQuantity} (새 총계: ${shipmentData[normalizedProduct].total})`);
+        }
+      }
+    }
+    
+    console.log(`✅ 쿠팡 데이터 처리 완료: ${coupangCount}개 항목 처리`);
+    return coupangCount;
+  },
+
+  /**
+   * 제품명 정규화 (ProductDownloader용)
+   */
+  normalizeProductNameForProductDownloader: function(productName) {
+    if (productName.includes('사골고기곰탕')) {
+      return '사골고기곰탕5개입';
+    }
+    else if (productName.includes('사골곰탕') && (productName.includes('20팩') || productName.includes('20개입'))) {
+      return '사골곰탕20개입';
+    }
+    else if (productName.includes('사골곰탕') && (productName.includes('10팩') || productName.includes('10개입'))) {
+      return '사골곰탕10개입';
+    }
+    else if (productName.includes('사골곰탕') && !productName.includes('사골고기곰탕') && 
+            (productName.includes('5팩') || productName.includes('5개입') || productName.includes('1박스'))) {
+      return '사골곰탕5개입';
+    }
+    else if (productName.includes('육포')) {
+      return '육포5개입';
+    }
+    
+    return null;
   },
 
   /**
