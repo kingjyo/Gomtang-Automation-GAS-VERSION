@@ -24,7 +24,7 @@ function setupTriggers() {
     
     console.log('새 트리거 생성됨:', trigger.getUniqueId());
     
-    SpreadsheetApp.getUi().alert('✅ 자동 실행 설정 완료!\n매일 오후 2시에 싸이버스카이 데이터가 자동으로 업데이트됩니다.\n\n참고: 기존 트리거가 있다면 Google Apps Script 편집기에서 수동으로 삭제해주세요.');
+    SpreadsheetApp.getUi().alert('✅ 완전한 자동화 설정 완료!\n\n🔄 매일 오후 2시 실행 과정:\n1️⃣ 싸이버스카이 데이터 수집\n2️⃣ EDI 데이터 처리 (1~3:30시 사이)\n3️⃣ 데이터 가공 및 검산\n4️⃣ 품목별 시트 생성\n5️⃣ 자동 이메일 전송\n\n📧 이메일이 자동으로 발송됩니다!\n\n참고: 기존 트리거가 있다면 Google Apps Script 편집기에서 수동으로 삭제해주세요.');
     
   } catch (error) {
     console.error('트리거 설정 실패:', error);
@@ -96,7 +96,7 @@ function dailyUpdate() {
 }
 
 /**
- * EDI 데이터 확인 및 업데이트
+ * EDI 데이터 확인 및 전체 자동화 파이프라인 실행
  */
 function checkAndUpdateEDI() {
   try {
@@ -104,25 +104,120 @@ function checkAndUpdateEDI() {
     const hours = now.getHours();
     const minutes = now.getMinutes();
     
-    // 오후 1시 ~ 3시 30분 사이면 EDI 확인
+    // 오후 1시 ~ 3시 30분 사이면 EDI 확인 및 전체 파이프라인 실행
     if ((hours === 13) || (hours === 14) || (hours === 15 && minutes <= 30)) {
+      logUpdate('전체 자동화 파이프라인 시작', { success: true, time: now.toLocaleString('ko-KR') });
+      
+      // 1. EDI 데이터 업데이트
       const ediResult = EDIData.updateEDIData();
+      logUpdate('EDI 데이터 업데이트', ediResult);
       
       if (ediResult.success) {
-        // EDI 데이터도 성공적으로 가져왔으면 데이터 처리
+        // 2. 데이터 처리 (A+B → C 시트)
         const processResult = DataProcessor.processData();
+        logUpdate('데이터 처리 (A+B→C)', processResult);
         
         if (processResult.success) {
-          logUpdate('EDI 업데이트 및 데이터 처리 완료', processResult);
-          
-          // 검산 실행
+          // 3. 검산 실행
           const verifyResult = Verification.runVerification();
-          logUpdate('검산 결과', verifyResult);
+          logUpdate('검산 실행', verifyResult);
+          
+          // 4. 품목별 분할 (선택적)
+          try {
+            const splitResult = ProductSpliter.splitByProduct();
+            logUpdate('품목별 분할', splitResult);
+          } catch (splitError) {
+            logUpdate('품목별 분할 (선택적)', { success: false, error: splitError.toString() });
+          }
+          
+          // 5. 완전한 파이프라인 실행 (데이터 가공 → 이메일 전송)
+          executeFullAutomationPipeline();
         }
+      } else {
+        // EDI 실패해도 기본 데이터 처리 시도
+        logUpdate('EDI 없이 기본 데이터 처리 시도', { success: true });
+        executeBasicAutomationPipeline();
       }
+    } else {
+      // 시간대가 아니면 기본 데이터 처리만
+      logUpdate('EDI 시간대 아님 - 기본 처리만 실행', { success: true, time: now.toLocaleString('ko-KR') });
+      executeBasicAutomationPipeline();
     }
+    
   } catch (error) {
-    logUpdate('EDI 확인 오류', { error: error.toString() });
+    logUpdate('자동화 파이프라인 오류', { success: false, error: error.toString() });
+  }
+}
+
+/**
+ * 완전한 자동화 파이프라인 실행 (EDI 포함)
+ */
+function executeFullAutomationPipeline() {
+  try {
+    logUpdate('완전한 자동화 파이프라인 실행 시작', { success: true });
+    
+    // 1. 품목별 시트 생성 및 엑셀 다운로드
+    const downloadResult = ProductDownloader.downloadProductSheets();
+    logUpdate('품목별 시트 다운로드', downloadResult);
+    
+    if (downloadResult.success) {
+      // 2. 자동 이메일 전송
+      const emailResult = ProductDownloader.sendEmailWithProductSheets();
+      logUpdate('자동 이메일 전송', emailResult);
+      
+      if (emailResult.success) {
+        logUpdate('🎉 완전한 자동화 파이프라인 성공!', { 
+          success: true, 
+          completedSteps: ['데이터수집', 'EDI처리', '데이터가공', '검산', '품목별생성', '이메일전송'] 
+        });
+      } else {
+        logUpdate('이메일 전송 실패하지만 데이터 처리는 완료', emailResult);
+      }
+    } else {
+      logUpdate('품목별 시트 생성 실패', downloadResult);
+    }
+    
+  } catch (error) {
+    logUpdate('완전한 자동화 파이프라인 오류', { success: false, error: error.toString() });
+  }
+}
+
+/**
+ * 기본 자동화 파이프라인 실행 (EDI 없이)
+ */
+function executeBasicAutomationPipeline() {
+  try {
+    logUpdate('기본 자동화 파이프라인 실행 시작', { success: true });
+    
+    // 1. 기본 데이터 처리 시도
+    const processResult = DataProcessor.processData();
+    logUpdate('기본 데이터 처리', processResult);
+    
+    // 2. 검산 (선택적)
+    try {
+      const verifyResult = Verification.runVerification();
+      logUpdate('기본 검산', verifyResult);
+    } catch (verifyError) {
+      logUpdate('기본 검산 (선택적)', { success: false, error: verifyError.toString() });
+    }
+    
+    // 3. 싸이버스카이 데이터만으로 이메일 전송 시도
+    try {
+      const emailResult = ProductDownloader.sendEmailWithProductSheets();
+      logUpdate('기본 이메일 전송 (싸이버스카이만)', emailResult);
+      
+      if (emailResult.success) {
+        logUpdate('✅ 기본 자동화 파이프라인 성공!', { 
+          success: true, 
+          completedSteps: ['데이터수집', '기본가공', '이메일전송'] 
+        });
+      }
+    } catch (emailError) {
+      logUpdate('기본 이메일 전송 실패', { success: false, error: emailError.toString() });
+    }
+    
+  } catch (error) {
+    logUpdate('기본 자동화 파이프라인 오류', { success: false, error: error.toString() });
   }
 }
 

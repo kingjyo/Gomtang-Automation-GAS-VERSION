@@ -951,6 +951,115 @@ function getEmailRecipients() {
   }
 }
 
+/**
+   * 자동 이메일 전송 (트리거용) - 품목별 시트 생성하고 이메일로 전송
+   */
+  sendEmailWithProductSheets: function(targetDate) {
+    console.log('=== 자동 이메일 전송 시작 ===');
+    
+    try {
+      // 날짜 처리
+      let dateString;
+      if (targetDate) {
+        if (targetDate.length === 4) {
+          // MMDD 형식을 YYYYMMDD로 변환
+          const currentYear = new Date().getFullYear();
+          const month = targetDate.substring(0, 2);
+          const day = targetDate.substring(2, 4);
+          dateString = currentYear + month + day;
+        } else {
+          // YYYYMMDD 형식
+          dateString = targetDate.replace(/\//g, '').replace(/-/g, '');
+        }
+      } else {
+        dateString = getTodayDate();
+      }
+      
+      console.log('자동 이메일 전송 날짜:', dateString);
+      
+      // 1. 품목별 시트 생성 및 다운로드
+      const downloadResult = this.downloadProductSheets(targetDate);
+      
+      if (!downloadResult.success) {
+        return {
+          success: false,
+          error: '품목별 시트 생성 실패: ' + downloadResult.error,
+          step: 'downloadProductSheets'
+        };
+      }
+      
+      // 2. 이메일 수신자 목록 가져오기
+      const recipientsResult = this.getEmailRecipients();
+      if (!recipientsResult.success) {
+        return {
+          success: false,
+          error: '이메일 수신자 목록 조회 실패: ' + recipientsResult.error,
+          step: 'getEmailRecipients'
+        };
+      }
+      
+      if (recipientsResult.recipients.length === 0) {
+        return {
+          success: false,
+          error: '전송 대상자가 없습니다. 이메일_설정 시트에서 전송여부를 체크해주세요.',
+          step: 'noRecipients'
+        };
+      }
+      
+      // 3. 출고 데이터 수집
+      const shipmentData = this.collectShipmentData(dateString);
+      if (!shipmentData.success) {
+        return {
+          success: false,
+          error: '출고 데이터 수집 실패: ' + shipmentData.error,
+          step: 'collectShipmentData'
+        };
+      }
+      
+      // 4. 이메일 내용 생성
+      const emailContent = this.generateEmailContent(shipmentData.data, dateString);
+      
+      // 5. 첨부 파일 준비 (생성된 엑셀 파일)
+      const excelFileId = downloadResult.downloadInfo.fileId;
+      const attachment = DriveApp.getFileById(excelFileId);
+      
+      // 6. 이메일 전송
+      const subject = `${dateString.substring(4,6)}.${dateString.substring(6,8)} 간편식 출고요청 (자동전송)`;
+      const recipients = recipientsResult.recipients.map(r => r.email).join(',');
+      
+      GmailApp.sendEmail(
+        recipients,
+        subject,
+        emailContent,
+        {
+          attachments: [attachment],
+          name: '한국공항 김영준 (자동시스템)'
+        }
+      );
+      
+      console.log('✅ 자동 이메일 전송 완료');
+      
+      return {
+        success: true,
+        message: `자동 이메일 전송 완료 (${dateString})`,
+        recipientCount: recipientsResult.recipients.length,
+        recipients: recipientsResult.recipients,
+        fileName: downloadResult.downloadInfo.fileName,
+        fileId: excelFileId,
+        shipmentSummary: shipmentData.data
+      };
+      
+    } catch (error) {
+      console.error('자동 이메일 전송 실패:', error);
+      return {
+        success: false,
+        error: error.toString(),
+        step: 'emailSending'
+      };
+    }
+  }
+};
+
 // 이메일 전송 (HtmlService에서 호출)
 function sendShipmentEmail(targetDate, recipients, excelFileId, fileName) {
   console.log('=== Global Function Start: sendShipmentEmail ===');
