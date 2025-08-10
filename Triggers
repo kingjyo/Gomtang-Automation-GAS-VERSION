@@ -224,3 +224,58 @@ function immediateTest() {
     SpreadsheetApp.getUi().alert('❌ 즉시 테스트 오류: ' + error.toString());
   }
 }
+
+/**
+ * 날짜 지정 테스트 (과거 데이터 테스트용)
+ */
+function testWithDate() {
+  try {
+    const ui = SpreadsheetApp.getUi();
+    
+    // 사용자에게 날짜 입력 요청
+    const response = ui.prompt(
+      '📅 날짜 지정 테스트',
+      '테스트할 날짜를 입력하세요:\n\n형식: MMDD (예: 0728, 0810)\n또는 YYYYMMDD (예: 20240728)',
+      ui.ButtonSet.OK_CANCEL
+    );
+    
+    if (response.getSelectedButton() === ui.Button.CANCEL) {
+      return;
+    }
+    
+    const inputDate = response.getResponseText().trim();
+    if (!inputDate) {
+      ui.alert('❌ 날짜를 입력해주세요.');
+      return;
+    }
+    
+    console.log('=== 날짜 지정 테스트 시작 ===');
+    console.log('입력 날짜:', inputDate);
+    
+    // 설정 초기화
+    initializeConfig();
+    
+    // 현재 시간 표시
+    const now = new Date();
+    console.log('현재 시간:', now.toLocaleString('ko-KR'));
+    
+    // 지정 날짜로 싸이버스카이 데이터 업데이트 시도
+    const cyberskyResult = CyberskyData.updateCyberskyDataForDate(inputDate);
+    console.log('싸이버스카이 결과:', cyberskyResult);
+    
+    // 결과 로깅
+    logUpdate(`날짜 지정 테스트 (${inputDate})`, cyberskyResult);
+    
+    // UI 알림
+    const message = cyberskyResult.success 
+      ? `✅ 날짜 지정 테스트 성공!\n날짜: ${inputDate}\n시트: ${cyberskyResult.sheetName}\n행 수: ${cyberskyResult.rowCount}` 
+      : `❌ 날짜 지정 테스트 실패:\n날짜: ${inputDate}\n오류: ${cyberskyResult.error}`;
+      
+    ui.alert(message);
+    
+  } catch (error) {
+    console.error('날짜 지정 테스트 오류:', error);
+    logUpdate('날짜 지정 테스트 오류', { success: false, error: error.toString() });
+    SpreadsheetApp.getUi().alert('❌ 날짜 지정 테스트 오류: ' + error.toString());
+  }
+}
