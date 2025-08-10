@@ -8,23 +8,12 @@ const EmailSender = {
    * 엑셀 파일에서 출고 데이터를 추출하고 이메일 전송
    */
   processExcelAndSendEmail: function(fileData, fileName, targetDate) {
-    console.log('=== 엑셀 파일 처리 및 이메일 전송 시작 ===');
+    console.log('=== 스프레드시트에서 출고 데이터 처리 및 이메일 전송 시작 ===');
     console.log('Parameters:', { fileName, targetDate });
     
     try {
       // 설정 초기화
       initializeConfig();
-      
-      // Base64 디코딩
-      const blob = Utilities.newBlob(
-        Utilities.base64Decode(fileData), 
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 
-        fileName
-      );
-      
-      // 임시 파일로 저장
-      const tempFile = DriveApp.createFile(blob);
-      tempFile.setName('temp_email_' + fileName);
       
       // 날짜 처리
       let dateString;
@@ -45,27 +34,12 @@ const EmailSender = {
       
       console.log('Target date:', dateString);
       
-      // 엑셀 파일을 Google Sheets로 변환
-      const resource = {
-        title: `temp_email_${dateString}`,
-        mimeType: MimeType.GOOGLE_SHEETS
-      };
+      // 현재 스프레드시트에서 직접 데이터 읽기
+      const currentSpreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+      console.log('Current spreadsheet sheets:', currentSpreadsheet.getSheets().map(s => s.getName()));
       
-      const fileId = tempFile.getId();
-      const convertedFile = Drive.Files.copy(resource, fileId);
-      
-      // 임시 파일 삭제
-      DriveApp.getFileById(fileId).setTrashed(true);
-      
-      // 변환된 스프레드시트 열기
-      const sourceSpreadsheet = SpreadsheetApp.openById(convertedFile.id);
-      console.log('Available sheets:', sourceSpreadsheet.getSheets().map(s => s.getName()));
-      
-      // 출고 데이터 수집
-      const shipmentData = this.extractShipmentDataFromExcel(sourceSpreadsheet, dateString);
-      
-      // 변환된 파일 정리
-      DriveApp.getFileById(convertedFile.id).setTrashed(true);
+      // 출고 데이터 수집 (스프레드시트 내부 시트들에서)
+      const shipmentData = this.extractShipmentDataFromSpreadsheet(currentSpreadsheet, dateString);
       
       if (!shipmentData.success) {
         return shipmentData;
@@ -84,18 +58,38 @@ const EmailSender = {
         };
       }
       
-      // 이메일 내용 생성
+      // 이메일 내용 생성 (스프레드시트 데이터 기반)
       const emailContent = ProductDownloader.generateEmailContent(shipmentData.data, dateString);
       
-      // 원본 엑셀 파일을 다시 생성 (첨부용)
-      const excelBlob = Utilities.newBlob(
-        Utilities.base64Decode(fileData), 
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 
-        this.generateEmailFileName(dateString)
-      );
+      // 첨부할 엑셀 파일 처리
+      let attachmentBlob;
+      if (fileData && fileName) {
+        // 사용자가 업로드한 엑셀 파일 사용
+        attachmentBlob = Utilities.newBlob(
+          Utilities.base64Decode(fileData), 
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 
+          fileName
+        );
+        console.log(`✅ 첨부파일로 사용자 업로드 파일 사용: ${fileName}`);
+      } else {
+        // 파일이 없으면 스프레드시트에서 간편식 수기송장 파일 찾기
+        const downloadResult = ProductDownloader.downloadProductSheets(targetDate);
+        if (downloadResult.success && downloadResult.downloadInfo) {
+          const fileId = downloadResult.downloadInfo.fileId;
+          const file = DriveApp.getFileById(fileId);
+          attachmentBlob = file.getBlob();
+          console.log(`✅ 첨부파일로 생성된 간편식 수기송장 사용: ${downloadResult.downloadInfo.fileName}`);
+        } else {
+          console.log('❌ 첨부할 엑셀 파일이 없고 간편식 수기송장도 생성할 수 없음');
+          return {
+            success: false,
+            error: '첨부할 엑셀 파일을 업로드하거나 품목별 시트를 먼저 생성해주세요.'
+          };
+        }
+      }
       
       // 이메일 전송
-      const subject = `${dateString.substring(2,4)}.${dateString.substring(4,6)} 간편식 출고요청`;
+      const subject = `${dateString.substring(4,6)}.${dateString.substring(6,8)} 간편식 출고요청`;
       const recipients = recipientsResult.recipients.map(r => r.email).join(',');
       
       GmailApp.sendEmail(
@@ -103,19 +97,23 @@ const EmailSender = {
         subject,
         emailContent,
         {
-          attachments: [excelBlob],
+          attachments: [attachmentBlob],
           name: '한국공항 김영준'
         }
       );
       
       console.log('=== 이메일 전송 완료 ===');
+      
+      // 첨부파일명 결정
+      const attachmentFileName = (fileData && fileName) ? fileName : this.generateEmailFileName(dateString);
+      
       return {
         success: true,
-        message: `이메일이 성공적으로 전송되었습니다.\n받는 사람: ${recipientsResult.recipients.length}명\n파일명: ${this.generateEmailFileName(dateString)}`,
+        message: `이메일이 성공적으로 전송되었습니다.\n받는 사람: ${recipientsResult.recipients.length}명\n파일명: ${attachmentFileName}`,
         recipientCount: recipientsResult.recipients.length,
         recipients: recipientsResult.recipients,
         shipmentSummary: shipmentData.data,
-        fileName: this.generateEmailFileName(dateString)
+        fileName: attachmentFileName
       };
       
     } catch (error) {
@@ -128,90 +126,659 @@ const EmailSender = {
   },
 
   /**
-   * 엑셀 파일에서 출고 데이터 추출
+   * 스프레드시트에서 출고 데이터 추출 (싸이버스카이 시트 + 검산결과 시트)
    */
-  extractShipmentDataFromExcel: function(sourceSpreadsheet, dateString) {
-    console.log(`=== 엑셀 파일에서 출고 데이터 추출: ${dateString} ===`);
+  extractShipmentDataFromSpreadsheet: function(spreadsheet, dateString) {
+    console.log(`=== 스프레드시트에서 출고 데이터 추출: ${dateString} ===`);
+    
+    // 로그 시트에 기록할 상세 로그
+    const logEntries = [];
+    logEntries.push(`[${new Date().toLocaleString()}] 스프레드시트 데이터 추출 시작 - 대상 날짜: ${dateString}`);
     
     try {
       const shipmentData = {
         '사골고기곰탕5개입': { cybersky: 0, coupang: 0, total: 0 },
+        '사골곰탕5개입': { cybersky: 0, coupang: 0, total: 0 },
+        '사골곰탕20개입': { cybersky: 0, coupang: 0, total: 0 },
+        '사골곰탕10개입': { cybersky: 0, coupang: 0, total: 0 },
+        '육포5개입': { cybersky: 0, coupang: 0, total: 0 }
+      };
+      
+      // 1. 싸이버스카이 시트에서 데이터 읽기
+      const cyberskySheetName = `${dateString}_간편식_싸이버스카이`;
+      const cyberskySheet = spreadsheet.getSheetByName(cyberskySheetName);
+      
+      console.log(`🔍 싸이버스카이 시트 찾기: ${cyberskySheetName}`);
+      logEntries.push(`🔍 싸이버스카이 시트 찾기: ${cyberskySheetName}`);
+      
+      if (!cyberskySheet) {
+        const errorMsg = `❌ 싸이버스카이 시트를 찾을 수 없습니다: ${cyberskySheetName}`;
+        console.log(errorMsg);
+        logEntries.push(errorMsg);
+        
+        this.saveEmailProcessLog(logEntries, 'Spreadsheet Data Extraction - ERROR');
+        return {
+          success: false,
+          error: `싸이버스카이 시트를 찾을 수 없습니다: ${cyberskySheetName}`
+        };
+      }
+      
+      console.log(`✅ 싸이버스카이 시트 발견: ${cyberskySheet.getName()}`);
+      logEntries.push(`✅ 싸이버스카이 시트 발견: ${cyberskySheet.getName()}`);
+      
+      // 싸이버스카이 데이터 처리
+      const cyberskyResult = this.processCyberskySheet(cyberskySheet, shipmentData, logEntries);
+      
+      // 2. EDI 시트에서 데이터 읽기 (있는 경우)
+      const ediSheetName = `${dateString}_간편식_EDI`;
+      const ediSheet = spreadsheet.getSheetByName(ediSheetName);
+      
+      console.log(`🔍 EDI 시트 찾기: ${ediSheetName}`);
+      logEntries.push(`🔍 EDI 시트 찾기: ${ediSheetName}`);
+      
+      if (ediSheet) {
+        console.log(`✅ EDI 시트 발견: ${ediSheet.getName()}`);
+        logEntries.push(`✅ EDI 시트 발견: ${ediSheet.getName()}`);
+        
+        // EDI 시트 처리
+        const ediResult = this.processEDISheet(ediSheet, shipmentData, logEntries);
+      } else {
+        console.log(`⚠️ EDI 시트 없음 - EDI 데이터 건너뛰기`);
+        logEntries.push(`⚠️ EDI 시트 없음 - EDI 데이터 건너뛰기`);
+      }
+
+      // 3. 수기송장 시트에서 데이터 읽기 (있는 경우)
+      const manualSheetName = `${dateString}_간편식_수기송장`;
+      const manualSheet = spreadsheet.getSheetByName(manualSheetName);
+      
+      console.log(`🔍 수기송장 시트 찾기: ${manualSheetName}`);
+      logEntries.push(`🔍 수기송장 시트 찾기: ${manualSheetName}`);
+      
+      if (manualSheet) {
+        console.log(`✅ 수기송장 시트 발견: ${manualSheet.getName()}`);
+        logEntries.push(`✅ 수기송장 시트 발견: ${manualSheet.getName()}`);
+        
+        // 수기송장 시트 처리
+        const manualResult = this.processManualSheet(manualSheet, shipmentData, logEntries);
+      } else {
+        console.log(`⚠️ 수기송장 시트 없음 - 수기송장 데이터 건너뛰기`);
+        logEntries.push(`⚠️ 수기송장 시트 없음 - 수기송장 데이터 건너뛰기`);
+      }
+
+      // 4. 검산결과 시트에서 쿠팡 데이터 읽기 (있는 경우)
+      const verificationSheetName = `${dateString}_검산결과`;
+      const verificationSheet = spreadsheet.getSheetByName(verificationSheetName);
+      
+      console.log(`🔍 검산결과 시트 찾기: ${verificationSheetName}`);
+      logEntries.push(`🔍 검산결과 시트 찾기: ${verificationSheetName}`);
+      
+      if (verificationSheet) {
+        console.log(`✅ 검산결과 시트 발견: ${verificationSheet.getName()}`);
+        logEntries.push(`✅ 검산결과 시트 발견: ${verificationSheet.getName()}`);
+        
+        // 검산결과 시트에서 쿠팡 데이터 읽기
+        const coupangResult = this.processCoupangDataFromVerification(verificationSheet, shipmentData, logEntries);
+      } else {
+        console.log(`⚠️ 검산결과 시트 없음 - 쿠팡 데이터 건너뛰기`);
+        logEntries.push(`⚠️ 검산결과 시트 없음 - 쿠팡 데이터 건너뛰기`);
+      }
+      
+      // 최종 결과 로깅
+      console.log('📊 최종 출고 데이터:');
+      logEntries.push('📊 최종 출고 데이터:');
+      
+      let totalQuantity = 0;
+      for (const [product, data] of Object.entries(shipmentData)) {
+        if (data.total > 0) {
+          const summary = `  ${product}: 총 ${data.total}개 (싸이버스카이: ${data.cybersky}, 쿠팡: ${data.coupang})`;
+          console.log(summary);
+          logEntries.push(summary);
+          totalQuantity += data.total;
+        }
+      }
+      
+      if (totalQuantity === 0) {
+        console.log('  ❌ 출고할 제품이 없습니다!');
+        logEntries.push('  ❌ 출고할 제품이 없습니다!');
+      } else {
+        console.log(`✅ 총 출고량: ${totalQuantity}개`);
+        logEntries.push(`✅ 총 출고량: ${totalQuantity}개`);
+      }
+      
+      // 로그 시트에 저장
+      try {
+        this.saveEmailProcessLog(logEntries, 'Spreadsheet Data Extraction');
+        console.log('📝 상세 로그가 이메일_로그 시트에 저장되었습니다.');
+      } catch (logError) {
+        console.error('로그 저장 실패:', logError);
+      }
+      
+      return {
+        success: true,
+        data: shipmentData,
+        totalQuantity: totalQuantity,
+        logs: logEntries
+      };
+      
+    } catch (error) {
+      console.error('스프레드시트 출고 데이터 추출 실패:', error);
+      logEntries.push(`❌ 오류 발생: ${error.toString()}`);
+      
+      // 오류 로그도 저장
+      try {
+        this.saveEmailProcessLog(logEntries, 'Spreadsheet Data Extraction - ERROR');
+      } catch (logError) {
+        console.error('오류 로그 저장 실패:', logError);
+      }
+      
+      return {
+        success: false,
+        error: error.toString(),
+        logs: logEntries
+      };
+    }
+  },
+
+  /**
+   * 엑셀 파일에서 출고 데이터 추출 (기존 함수 - 참고용 유지)
+   */
+  extractShipmentDataFromExcel: function(sourceSpreadsheet, dateString) {
+    console.log(`=== 엑셀 파일에서 출고 데이터 추출: ${dateString} ===`);
+    
+    // 로그 시트에 기록할 상세 로그
+    const logEntries = [];
+    logEntries.push(`[${new Date().toLocaleString()}] 엑셀 데이터 추출 시작 - 대상 날짜: ${dateString}`);
+    
+    try {
+      const shipmentData = {
+        '사골고기곰탕5개입': { cybersky: 0, coupang: 0, total: 0 },
+        '사골곰탕5개입': { cybersky: 0, coupang: 0, total: 0 },
         '사골곰탕20개입': { cybersky: 0, coupang: 0, total: 0 },
         '사골곰탕10개입': { cybersky: 0, coupang: 0, total: 0 },
         '육포5개입': { cybersky: 0, coupang: 0, total: 0 }
       };
       
       const sheets = sourceSpreadsheet.getSheets();
-      let processedSheets = 0;
+      let processedRows = 0;
+      
+      console.log(`📊 총 ${sheets.length}개 시트 발견`);
+      logEntries.push(`📊 총 ${sheets.length}개 시트 발견: ${sheets.map(s => s.getName()).join(', ')}`);
       
       // 모든 시트를 검사해서 데이터 추출
       for (const sheet of sheets) {
         const sheetName = sheet.getName();
-        console.log(`Processing sheet: ${sheetName}`);
+        console.log(`📋 Processing sheet: ${sheetName}`);
+        logEntries.push(`📋 시트 처리 중: ${sheetName}`);
         
         const data = sheet.getDataRange().getValues();
-        if (data.length <= 1) continue; // 헤더만 있거나 빈 시트 건너뛰기
+        console.log(`  └─ 시트 크기: ${data.length} 행 x ${data[0] ? data[0].length : 0} 열`);
+        logEntries.push(`  └─ 시트 크기: ${data.length} 행 x ${data[0] ? data[0].length : 0} 열`);
+        
+        if (data.length <= 1) {
+          console.log(`  └─ ⚠️ 데이터 없음 (헤더만 있거나 빈 시트)`);
+          logEntries.push(`  └─ ⚠️ 데이터 없음 (헤더만 있거나 빈 시트)`);
+          continue;
+        }
+        
+        // 헤더 행에서 필요한 열 인덱스 찾기
+        const headers = data[0];
+        let productColIndex = -1;
+        let quantityColIndex = -1;
+        let memoColIndex = -1;
+        
+        console.log(`  └─ 헤더 분석: ${headers.slice(0, 10).map((h, i) => `${i}:${h}`).join(', ')}...`);
+        logEntries.push(`  └─ 헤더 분석: ${headers.slice(0, 20).map((h, i) => `${i}:${h}`).join(', ')}`);
+        
+        // 헤더에서 열 찾기
+        for (let i = 0; i < headers.length; i++) {
+          const header = String(headers[i]).toUpperCase();
+          if (header.includes('PROD_NAME') || header.includes('상품명') || header.includes('제품명')) {
+            productColIndex = i;
+            console.log(`  └─ ✅ 상품명 열 발견: ${i}열 (${headers[i]})`);
+            logEntries.push(`  └─ ✅ 상품명 열 발견: ${i}열 (${headers[i]})`);
+          }
+          if (header.includes('ORDERCNT') || header.includes('수량') || header.includes('개수')) {
+            quantityColIndex = i;
+            console.log(`  └─ ✅ 수량 열 발견: ${i}열 (${headers[i]})`);
+            logEntries.push(`  └─ ✅ 수량 열 발견: ${i}열 (${headers[i]})`);
+          }
+          if (header.includes('메모') || header.includes('MEMO')) {
+            memoColIndex = i;
+            console.log(`  └─ ✅ 메모 열 발견: ${i}열 (${headers[i]})`);
+            logEntries.push(`  └─ ✅ 메모 열 발견: ${i}열 (${headers[i]})`);
+          }
+        }
+        
+        // 기본값 설정 (헤더를 못 찾은 경우)
+        if (productColIndex === -1) {
+          productColIndex = 15; // P열 (0-based index)
+          console.log(`  └─ ⚠️ 상품명 열을 찾지 못해 기본값 사용: P열(${productColIndex})`);
+          logEntries.push(`  └─ ⚠️ 상품명 열을 찾지 못해 기본값 사용: P열(${productColIndex})`);
+        }
+        if (quantityColIndex === -1) {
+          quantityColIndex = 2; // C열
+          console.log(`  └─ ⚠️ 수량 열을 찾지 못해 기본값 사용: C열(${quantityColIndex})`);
+          logEntries.push(`  └─ ⚠️ 수량 열을 찾지 못해 기본값 사용: C열(${quantityColIndex})`);
+        }
+        if (memoColIndex === -1) {
+          memoColIndex = 18; // S열
+          console.log(`  └─ ⚠️ 메모 열을 찾지 못해 기본값 사용: S열(${memoColIndex})`);
+          logEntries.push(`  └─ ⚠️ 메모 열을 찾지 못해 기본값 사용: S열(${memoColIndex})`);
+        }
+        
+        console.log(`  └─ 📍 최종 열 인덱스 - 상품명: ${productColIndex}, 수량: ${quantityColIndex}, 메모: ${memoColIndex}`);
+        logEntries.push(`  └─ 📍 최종 열 인덱스 - 상품명: ${productColIndex}, 수량: ${quantityColIndex}, 메모: ${memoColIndex}`);
         
         // 헤더 행 제외하고 처리
         for (let i = 1; i < data.length; i++) {
           const row = data[i];
           
           // 데이터가 있는 행인지 확인
-          if (!row || row.length < 3) continue;
+          if (!row || row.length <= Math.max(productColIndex, quantityColIndex)) continue;
           
-          const productName = String(row[1] || ''); // B열: 상품명 (일반적인 위치)
-          const quantity = parseInt(row[2] || 0); // C열: 수량 (일반적인 위치)
-          const memo = String(row[18] || ''); // S열: 메모1 (쿠팡 표시)
+          const productName = String(row[productColIndex] || '');
+          const quantity = parseInt(row[quantityColIndex] || 0);
+          const memo = memoColIndex >= 0 ? String(row[memoColIndex] || '') : '';
           
           if (quantity > 0 && productName) {
-            // 제품명 정규화 (새로운 분류 기준)
+            // console.log(`    🔍 행 ${i}: "${productName}" / 수량=${quantity} / 메모="${memo}"`);
+            // logEntries.push(`    🔍 행 ${i}: "${productName}" / 수량=${quantity} / 메모="${memo}"`);
+            
+            // 제품명 정규화 - 더 유연한 매칭
             let normalizedProduct = '';
-            if (productName.includes('사골고기곰탕') && productName.includes('5개입')) {
+            
+            // 사골고기곰탕 체크 (5팩 또는 5개입) - 반드시 "고기"가 포함되어야 함
+            if (productName.includes('사골고기곰탕')) {
               normalizedProduct = '사골고기곰탕5개입';
-            } else if (productName.includes('사골곰탕') && productName.includes('20개입')) {
+              console.log(`    ✅ 매칭: ${productName} → ${normalizedProduct}`);
+              logEntries.push(`    ✅ 매칭: ${productName} → ${normalizedProduct}`);
+            }
+            // 사골곰탕 20개입 체크
+            else if (productName.includes('사골곰탕') && (productName.includes('20팩') || productName.includes('20개입'))) {
               normalizedProduct = '사골곰탕20개입';
-            } else if (productName.includes('사골곰탕') && productName.includes('10개입')) {
+              console.log(`    ✅ 매칭: ${productName} → ${normalizedProduct}`);
+              logEntries.push(`    ✅ 매칭: ${productName} → ${normalizedProduct}`);
+            }
+            // 사골곰탕 10개입 체크
+            else if (productName.includes('사골곰탕') && (productName.includes('10팩') || productName.includes('10개입'))) {
               normalizedProduct = '사골곰탕10개입';
-            } else if (productName.includes('육포') && productName.includes('5개입')) {
-              normalizedProduct = '육포5개입';
+              console.log(`    ✅ 매칭: ${productName} → ${normalizedProduct}`);
+              logEntries.push(`    ✅ 매칭: ${productName} → ${normalizedProduct}`);
             }
-            // 5개입이 명시되지 않은 사골고기곰탕은 기본적으로 5개입으로 처리
-            else if (productName.includes('사골고기곰탕')) {
-              normalizedProduct = '사골고기곰탕5개입';
+            // 사골곰탕 5개입 체크 (사골고기곰탕이 아닌 경우)
+            else if (productName.includes('사골곰탕') && !productName.includes('사골고기곰탕') && 
+                    (productName.includes('5팩') || productName.includes('5개입') || productName.includes('1박스'))) {
+              normalizedProduct = '사골곰탕5개입';
+              console.log(`    ✅ 매칭: ${productName} → ${normalizedProduct}`);
+              logEntries.push(`    ✅ 매칭: ${productName} → ${normalizedProduct}`);
             }
-            // 개입이 명시되지 않은 육포는 기본적으로 5개입으로 처리
+            // 육포 체크
             else if (productName.includes('육포')) {
               normalizedProduct = '육포5개입';
+              console.log(`    ✅ 매칭: ${productName} → ${normalizedProduct}`);
+              logEntries.push(`    ✅ 매칭: ${productName} → ${normalizedProduct}`);
             }
             
             if (normalizedProduct && shipmentData[normalizedProduct]) {
-              if (memo.trim() === '쿠팡') {
-                shipmentData[normalizedProduct].coupang += quantity;
-              } else {
-                shipmentData[normalizedProduct].cybersky += quantity;
-              }
+              const category = memo.trim() === '쿠팡' ? 'coupang' : 'cybersky';
+              shipmentData[normalizedProduct][category] += quantity;
               shipmentData[normalizedProduct].total += quantity;
-              processedSheets++;
+              processedRows++;
+              // console.log(`    ➕ 추가: ${normalizedProduct} +${quantity} (${category}) → 총계: ${shipmentData[normalizedProduct].total}`);
+              // logEntries.push(`    ➕ 추가: ${normalizedProduct} +${quantity} (${category}) → 총계: ${shipmentData[normalizedProduct].total}`);
+            } else {
+              console.log(`    ❌ 매칭 실패: "${productName}"`);
+              logEntries.push(`    ❌ 매칭 실패: "${productName}"`);
             }
+          } else if (productName) {
+            // console.log(`    ⚠️ 건너뜀 행 ${i}: "${productName}" (수량=${quantity})"`);
+            // logEntries.push(`    ⚠️ 건너뜀 행 ${i}: "${productName}" (수량=${quantity})"`);
           }
         }
       }
       
-      console.log('Shipment data extracted:', shipmentData);
-      console.log(`Processed ${processedSheets} data entries from Excel file`);
+      // 최종 결과 로깅
+      console.log('📊 최종 출고 데이터:');
+      logEntries.push('📊 최종 출고 데이터:');
+      
+      let totalQuantity = 0;
+      for (const [product, data] of Object.entries(shipmentData)) {
+        if (data.total > 0) {
+          const summary = `  ${product}: 총 ${data.total}개 (싸이버스카이: ${data.cybersky}, 쿠팡: ${data.coupang})`;
+          console.log(summary);
+          logEntries.push(summary);
+          totalQuantity += data.total;
+        }
+      }
+      
+      if (totalQuantity === 0) {
+        console.log('  ❌ 출고할 제품이 없습니다!');
+        logEntries.push('  ❌ 출고할 제품이 없습니다!');
+      } else {
+        console.log(`✅ 총 출고량: ${totalQuantity}개, 처리된 행 수: ${processedRows}`);
+        logEntries.push(`✅ 총 출고량: ${totalQuantity}개, 처리된 행 수: ${processedRows}`);
+      }
+      
+      // 로그 시트에 저장
+      try {
+        this.saveEmailProcessLog(logEntries, 'Excel Data Extraction');
+        console.log('📝 상세 로그가 이메일_로그 시트에 저장되었습니다.');
+      } catch (logError) {
+        console.error('로그 저장 실패:', logError);
+      }
       
       return {
         success: true,
-        data: shipmentData
+        data: shipmentData,
+        processedRows: processedRows,
+        totalQuantity: totalQuantity,
+        logs: logEntries
       };
       
     } catch (error) {
       console.error('엑셀 출고 데이터 추출 실패:', error);
+      logEntries.push(`❌ 오류 발생: ${error.toString()}`);
+      
+      // 오류 로그도 저장
+      try {
+        this.saveEmailProcessLog(logEntries, 'Excel Data Extraction - ERROR');
+      } catch (logError) {
+        console.error('오류 로그 저장 실패:', logError);
+      }
+      
       return {
         success: false,
-        error: error.toString()
+        error: error.toString(),
+        logs: logEntries
       };
     }
+  },
+
+  /**
+   * 싸이버스카이 시트 처리
+   */
+  processCyberskySheet: function(cyberskySheet, shipmentData, logEntries) {
+    console.log('📋 싸이버스카이 시트 데이터 처리 시작');
+    logEntries.push('📋 싸이버스카이 시트 데이터 처리 시작');
+    
+    const data = cyberskySheet.getDataRange().getValues();
+    console.log(`  └─ 시트 크기: ${data.length} 행 x ${data[0] ? data[0].length : 0} 열`);
+    logEntries.push(`  └─ 시트 크기: ${data.length} 행 x ${data[0] ? data[0].length : 0} 열`);
+    
+    if (data.length <= 1) {
+      console.log(`  └─ ⚠️ 데이터 없음`);
+      logEntries.push(`  └─ ⚠️ 데이터 없음`);
+      return;
+    }
+    
+    // 고정 열 인덱스 사용 (사용자 명세에 따라)
+    const productColIndex = 15; // P열: PROD_NAME (0-based index)
+    const quantityColIndex = 19; // T열: ORDERCNT (0-based index)
+    
+    const headers = data[0];
+    console.log(`  └─ 📍 고정 열 사용 - P열(${productColIndex}): ${headers[productColIndex]}, T열(${quantityColIndex}): ${headers[quantityColIndex]}`);
+    logEntries.push(`  └─ 📍 고정 열 사용 - P열(${productColIndex}): ${headers[productColIndex]}, T열(${quantityColIndex}): ${headers[quantityColIndex]}`);
+    
+    let processedRows = 0;
+    
+    // 데이터 행 처리
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const productName = String(row[productColIndex] || '');
+      const quantity = parseInt(row[quantityColIndex] || 0);
+      
+      if (quantity > 0 && productName) {
+        // console.log(`    🔍 행 ${i}: "${productName}" / 수량=${quantity}`);
+        // logEntries.push(`    🔍 행 ${i}: "${productName}" / 수량=${quantity}`);
+        
+        const normalizedProduct = this.normalizeProductName(productName);
+        
+        if (normalizedProduct && shipmentData[normalizedProduct]) {
+          shipmentData[normalizedProduct].cybersky += quantity;
+          shipmentData[normalizedProduct].total += quantity;
+          processedRows++;
+          // console.log(`    ➕ 추가: ${normalizedProduct} +${quantity} (싸이버스카이) → 총계: ${shipmentData[normalizedProduct].total}`);
+          // logEntries.push(`    ➕ 추가: ${normalizedProduct} +${quantity} (싸이버스카이) → 총계: ${shipmentData[normalizedProduct].total}`);
+        } else {
+          console.log(`    ❌ 매칭 실패: "${productName}"`);
+          logEntries.push(`    ❌ 매칭 실패: "${productName}"`);
+        }
+      }
+    }
+    
+    const productSummary = Object.keys(shipmentData).map(key => 
+      `${key}: ${shipmentData[key].cybersky}개`
+    ).join(', ');
+    console.log(`✅ 싸이버스카이 처리 완료: ${processedRows}개 행 처리 (${productSummary})`);
+    logEntries.push(`✅ 싸이버스카이 처리 완료: ${processedRows}개 행 처리 (${productSummary})`);
+    
+    return processedRows;
+  },
+
+  /**
+   * EDI 시트 처리
+   */
+  processEDISheet: function(ediSheet, shipmentData, logEntries) {
+    console.log('📋 EDI 시트 데이터 처리 시작');
+    logEntries.push('📋 EDI 시트 데이터 처리 시작');
+    
+    const data = ediSheet.getDataRange().getValues();
+    console.log(`  └─ 시트 크기: ${data.length} 행 x ${data[0] ? data[0].length : 0} 열`);
+    logEntries.push(`  └─ 시트 크기: ${data.length} 행 x ${data[0] ? data[0].length : 0} 열`);
+    
+    if (data.length <= 1) {
+      console.log(`  └─ ⚠️ 데이터 없음`);
+      logEntries.push(`  └─ ⚠️ 데이터 없음`);
+      return;
+    }
+    
+    // 고정 열 인덱스 사용 (사용자 명세에 따라)
+    const productColIndex = 15; // P열: 상품명 (|로 분리된 경우 첫 부분) (0-based index)
+    const quantityColIndex = 16; // Q열: 수량 (0-based index)
+    
+    const headers = data[0];
+    console.log(`  └─ 📍 고정 열 사용 - P열(${productColIndex}): ${headers[productColIndex]}, Q열(${quantityColIndex}): ${headers[quantityColIndex]}`);
+    logEntries.push(`  └─ 📍 고정 열 사용 - P열(${productColIndex}): ${headers[productColIndex]}, Q열(${quantityColIndex}): ${headers[quantityColIndex]}`);
+    
+    let processedRows = 0;
+    
+    // 데이터 행 처리
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const productNameRaw = String(row[productColIndex] || '');
+      const quantity = parseInt(row[quantityColIndex] || 0);
+      
+      // 상품명에서 | 앞 부분만 추출
+      const productName = productNameRaw.includes('|') ? productNameRaw.split('|')[0].trim() : productNameRaw.trim();
+      
+      if (quantity > 0 && productName) {
+        // console.log(`    🔍 행 ${i}: "${productName}" (원본: "${productNameRaw}") / 수량=${quantity}`);
+        // logEntries.push(`    🔍 행 ${i}: "${productName}" (원본: "${productNameRaw}") / 수량=${quantity}`);
+        
+        const normalizedProduct = this.normalizeProductName(productName);
+        
+        if (normalizedProduct && shipmentData[normalizedProduct]) {
+          shipmentData[normalizedProduct].cybersky += quantity; // EDI도 일반적으로 cybersky로 분류
+          shipmentData[normalizedProduct].total += quantity;
+          processedRows++;
+          // console.log(`    ➕ 추가: ${normalizedProduct} +${quantity} (EDI) → 총계: ${shipmentData[normalizedProduct].total}`);
+          // logEntries.push(`    ➕ 추가: ${normalizedProduct} +${quantity} (EDI) → 총계: ${shipmentData[normalizedProduct].total}`);
+        } else {
+          console.log(`    ❌ 매칭 실패: "${productName}"`);
+          logEntries.push(`    ❌ 매칭 실패: "${productName}"`);
+        }
+      }
+    }
+    
+    const ediSummary = Object.keys(shipmentData).map(key => 
+      `${key}: +${shipmentData[key].edi}개`
+    ).join(', ');
+    console.log(`✅ EDI 처리 완료: ${processedRows}개 행 처리 (${ediSummary})`);
+    logEntries.push(`✅ EDI 처리 완료: ${processedRows}개 행 처리 (${ediSummary})`);
+    
+    return processedRows;
+  },
+
+  /**
+   * 수기송장 시트 처리
+   */
+  processManualSheet: function(manualSheet, shipmentData, logEntries) {
+    console.log('📋 수기송장 시트 데이터 처리 시작');
+    logEntries.push('📋 수기송장 시트 데이터 처리 시작');
+    
+    // 처리 전 현재 카운트 저장
+    const originalCounts = {};
+    Object.keys(shipmentData).forEach(key => {
+      originalCounts[key] = shipmentData[key].cybersky;
+    });
+    
+    const data = manualSheet.getDataRange().getValues();
+    console.log(`  └─ 시트 크기: ${data.length} 행 x ${data[0] ? data[0].length : 0} 열`);
+    logEntries.push(`  └─ 시트 크기: ${data.length} 행 x ${data[0] ? data[0].length : 0} 열`);
+    
+    if (data.length <= 1) {
+      console.log(`  └─ ⚠️ 데이터 없음`);
+      logEntries.push(`  └─ ⚠️ 데이터 없음`);
+      return;
+    }
+    
+    // 고정 열 인덱스 사용 (사용자 명세에 따라)
+    const productColIndex = 13; // N열: 품목명 (0-based index)
+    const quantityColIndex = 12; // M열: 수량 (0-based index)
+    const memoColIndex = 18; // S열: 메모1 (쿠팡 마킹) (0-based index)
+    
+    const headers = data[0];
+    console.log(`  └─ 📍 고정 열 사용 - N열(${productColIndex}): ${headers[productColIndex]}, M열(${quantityColIndex}): ${headers[quantityColIndex]}, S열(${memoColIndex}): ${headers[memoColIndex]}`);
+    logEntries.push(`  └─ 📍 고정 열 사용 - N열(${productColIndex}): ${headers[productColIndex]}, M열(${quantityColIndex}): ${headers[quantityColIndex]}, S열(${memoColIndex}): ${headers[memoColIndex]}`);
+    
+    let processedRows = 0;
+    
+    // 데이터 행 처리
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const productName = String(row[productColIndex] || '');
+      const quantity = parseInt(row[quantityColIndex] || 0);
+      const memo = String(row[memoColIndex] || '').trim();
+      
+      if (quantity > 0 && productName) {
+        // console.log(`    🔍 행 ${i}: "${productName}" / 수량=${quantity} / 메모="${memo}"`);
+        // logEntries.push(`    🔍 행 ${i}: "${productName}" / 수량=${quantity} / 메모="${memo}"`);
+        
+        const normalizedProduct = this.normalizeProductName(productName);
+        
+        if (normalizedProduct && shipmentData[normalizedProduct]) {
+          const category = memo === '쿠팡' ? 'coupang' : 'cybersky';
+          shipmentData[normalizedProduct][category] += quantity;
+          shipmentData[normalizedProduct].total += quantity;
+          processedRows++;
+          // console.log(`    ➕ 추가: ${normalizedProduct} +${quantity} (${category}) → 총계: ${shipmentData[normalizedProduct].total}`);
+          // logEntries.push(`    ➕ 추가: ${normalizedProduct} +${quantity} (${category}) → 총계: ${shipmentData[normalizedProduct].total}`);
+        } else {
+          console.log(`    ❌ 매칭 실패: "${productName}"`);
+          logEntries.push(`    ❌ 매칭 실패: "${productName}"`);
+        }
+      }
+    }
+    
+    const manualSummary = Object.keys(shipmentData).map(key => {
+      const cyberskyCount = shipmentData[key].cybersky - (originalCounts[key] || 0);
+      const coupangCount = shipmentData[key].coupang;
+      if (cyberskyCount > 0 && coupangCount > 0) {
+        return `${key}: +${cyberskyCount}개(일반) +${coupangCount}개(쿠팡)`;
+      } else if (cyberskyCount > 0) {
+        return `${key}: +${cyberskyCount}개`;
+      } else if (coupangCount > 0) {
+        return `${key}: +${coupangCount}개(쿠팡)`;
+      }
+      return null;
+    }).filter(Boolean).join(', ');
+    console.log(`✅ 수기송장 처리 완료: ${processedRows}개 행 처리 (${manualSummary})`);
+    logEntries.push(`✅ 수기송장 처리 완료: ${processedRows}개 행 처리 (${manualSummary})`);
+    
+    return processedRows;
+  },
+
+  /**
+   * 검산결과 시트에서 쿠팡 데이터 처리
+   */
+  processCoupangDataFromVerification: function(verificationSheet, shipmentData, logEntries) {
+    console.log('📋 검산결과 시트에서 쿠팡 데이터 처리 시작');
+    logEntries.push('📋 검산결과 시트에서 쿠팡 데이터 처리 시작');
+    
+    const data = verificationSheet.getDataRange().getValues();
+    console.log(`  └─ 검산결과 시트 크기: ${data.length} 행 x ${data[0] ? data[0].length : 0} 열`);
+    logEntries.push(`  └─ 검산결과 시트 크기: ${data.length} 행 x ${data[0] ? data[0].length : 0} 열`);
+    
+    if (data.length <= 1) {
+      console.log(`  └─ ⚠️ 검산결과 시트에 데이터 없음`);
+      logEntries.push(`  └─ ⚠️ 검산결과 시트에 데이터 없음`);
+      return 0;
+    }
+    
+    // H열(7)에 쿠팡 수량이 있는 행들에서 쿠팡 데이터 읽기
+    let coupangCount = 0;
+    
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const productName = String(row[1] || ''); // B열: 품목명
+      const coupangQuantity = parseInt(row[7] || 0); // H열: 쿠팡 수량
+      
+      if (coupangQuantity > 0 && productName) {
+        // I열(8)에서 총 출고수량 읽기 (있는 경우)
+        const totalQuantity = parseInt(row[8] || 0);
+        
+        console.log(`    🛒 쿠팡 데이터 발견: "${productName}" / 쿠팡수량=${coupangQuantity}, 총수량=${totalQuantity}`);
+        logEntries.push(`    🛒 쿠팡 데이터 발견: "${productName}" / 쿠팡수량=${coupangQuantity}, 총수량=${totalQuantity}`);
+        
+        if (totalQuantity > 0) {
+          const normalizedProduct = this.normalizeProductName(productName);
+          
+          if (normalizedProduct && shipmentData[normalizedProduct]) {
+            // H열에서 직접 쿠팡 수량을 가져옴
+            if (coupangQuantity > 0) {
+              shipmentData[normalizedProduct].coupang += coupangQuantity;
+              shipmentData[normalizedProduct].total += coupangQuantity; // 기존 총합에 쿠팡 수량 추가
+              coupangCount++;
+              
+              console.log(`    ➕ 쿠팡 추가: ${normalizedProduct} +${coupangQuantity} (새 총계: ${shipmentData[normalizedProduct].total})`);
+              logEntries.push(`    ➕ 쿠팡 추가: ${normalizedProduct} +${coupangQuantity} (새 총계: ${shipmentData[normalizedProduct].total})`);
+            }
+          } else {
+            console.log(`    ❌ 쿠팡 제품 매칭 실패: "${productName}"`);
+            logEntries.push(`    ❌ 쿠팡 제품 매칭 실패: "${productName}"`);
+          }
+        }
+      }
+    }
+    
+    console.log(`✅ 쿠팡 데이터 처리 완료: ${coupangCount}개 항목 처리`);
+    logEntries.push(`✅ 쿠팡 데이터 처리 완료: ${coupangCount}개 항목 처리`);
+    
+    return coupangCount;
+  },
+
+  /**
+   * 제품명 정규화
+   */
+  normalizeProductName: function(productName) {
+    if (productName.includes('사골고기곰탕')) {
+      return '사골고기곰탕5개입';
+    }
+    else if (productName.includes('사골곰탕') && (productName.includes('20팩') || productName.includes('20개입'))) {
+      return '사골곰탕20개입';
+    }
+    else if (productName.includes('사골곰탕') && (productName.includes('10팩') || productName.includes('10개입'))) {
+      return '사골곰탕10개입';
+    }
+    else if (productName.includes('사골곰탕') && !productName.includes('사골고기곰탕') && 
+            (productName.includes('5팩') || productName.includes('5개입') || productName.includes('1박스'))) {
+      return '사골곰탕5개입';
+    }
+    else if (productName.includes('육포')) {
+      return '육포5개입';
+    }
+    
+    return null;
   },
 
   /**
@@ -221,6 +788,73 @@ const EmailSender = {
     const month = dateString.substring(4, 6);
     const day = dateString.substring(6, 8);
     return `간편식 수기송장 (${month}.${day}).xlsx`;
+  },
+
+  /**
+   * 이메일 처리 로그를 시트에 저장
+   */
+  saveEmailProcessLog: function(logEntries, processName) {
+    console.log('=== 이메일 로그 시트 저장 시작 ===');
+    
+    try {
+      const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+      let logSheet = spreadsheet.getSheetByName('이메일_로그');
+      
+      // 로그 시트가 없으면 생성
+      if (!logSheet) {
+        console.log('이메일_로그 시트 생성');
+        logSheet = spreadsheet.insertSheet('이메일_로그');
+        
+        // 헤더 설정
+        const headers = ['타임스탬프', '프로세스', '상세로그'];
+        logSheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+        
+        // 헤더 스타일링
+        const headerRange = logSheet.getRange(1, 1, 1, headers.length);
+        headerRange.setBackground('#34a853');
+        headerRange.setFontColor('white');
+        headerRange.setFontWeight('bold');
+        headerRange.setHorizontalAlignment('center');
+        
+        // 열 너비 조정
+        logSheet.setColumnWidth(1, 150); // 타임스탬프
+        logSheet.setColumnWidth(2, 200); // 프로세스
+        logSheet.setColumnWidth(3, 800); // 상세로그
+        
+        console.log('이메일_로그 시트 초기화 완료');
+      }
+      
+      // 현재 시간
+      const timestamp = new Date().toLocaleString('ko-KR');
+      
+      // 로그 엔트리들을 하나의 긴 문자열로 결합
+      const combinedLog = logEntries.join('\n');
+      
+      // 새 행 추가
+      const newRow = [timestamp, processName, combinedLog];
+      logSheet.appendRow(newRow);
+      
+      // 최근 100개 항목만 유지 (오래된 것 삭제)
+      const lastRow = logSheet.getLastRow();
+      if (lastRow > 101) { // 헤더 + 100개
+        const deleteCount = lastRow - 101;
+        logSheet.deleteRows(2, deleteCount);
+        console.log(`오래된 로그 ${deleteCount}개 삭제`);
+      }
+      
+      // 최신 로그가 위로 오도록 정렬 (타임스탬프 기준 내림차순)
+      if (logSheet.getLastRow() > 1) {
+        const range = logSheet.getRange(2, 1, logSheet.getLastRow() - 1, 3);
+        range.sort({column: 1, ascending: false});
+      }
+      
+      console.log(`이메일 로그 저장 완료: ${processName} (${logEntries.length}개 항목)`);
+      return { success: true };
+      
+    } catch (error) {
+      console.error('이메일 로그 저장 실패:', error);
+      return { success: false, error: error.toString() };
+    }
   }
 };
 

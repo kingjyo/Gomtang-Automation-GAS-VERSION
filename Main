@@ -24,6 +24,119 @@ function initializeConfig() {
 }
 
 /**
+ * 이메일 설정 시트 생성
+ */
+function createEmailSettingsSheet() {
+  console.log('=== Function Start: createEmailSettingsSheet ===');
+  
+  try {
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    const sheetName = '이메일_설정';
+    
+    // 기존 시트가 있는지 확인
+    let emailSettingsSheet = spreadsheet.getSheetByName(sheetName);
+    
+    if (emailSettingsSheet) {
+      const ui = SpreadsheetApp.getUi();
+      const response = ui.alert(
+        '⚠️ 시트 이미 존재',
+        `'${sheetName}' 시트가 이미 존재합니다.\n\n기존 시트를 삭제하고 새로 만드시겠습니까?`,
+        ui.ButtonSet.YES_NO
+      );
+      
+      if (response === ui.Button.YES) {
+        spreadsheet.deleteSheet(emailSettingsSheet);
+        console.log('기존 이메일_설정 시트 삭제');
+      } else {
+        console.log('시트 생성 취소');
+        return { success: false, error: '사용자가 취소했습니다.' };
+      }
+    }
+    
+    // 새 시트 생성
+    emailSettingsSheet = spreadsheet.insertSheet(sheetName);
+    console.log('새 이메일_설정 시트 생성');
+    
+    // 헤더 설정
+    const headers = ['우선순위', '전송여부', '이름', '이메일', '메모'];
+    emailSettingsSheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    
+    // 헤더 스타일링
+    const headerRange = emailSettingsSheet.getRange(1, 1, 1, headers.length);
+    headerRange.setBackground('#4285f4');
+    headerRange.setFontColor('white');
+    headerRange.setFontWeight('bold');
+    headerRange.setHorizontalAlignment('center');
+    
+    // 샘플 데이터 추가
+    const sampleData = [
+      [1, 'TRUE', '김영준', 'example1@company.com', '담당자'],
+      [2, 'FALSE', '홍길동', 'example2@company.com', '백업 담당자'],
+      [3, 'TRUE', '이순신', 'example3@company.com', '관리자']
+    ];
+    
+    emailSettingsSheet.getRange(2, 1, sampleData.length, headers.length).setValues(sampleData);
+    
+    // 열 너비 조정
+    emailSettingsSheet.setColumnWidth(1, 80);  // 우선순위
+    emailSettingsSheet.setColumnWidth(2, 80);  // 전송여부
+    emailSettingsSheet.setColumnWidth(3, 100); // 이름
+    emailSettingsSheet.setColumnWidth(4, 200); // 이메일
+    emailSettingsSheet.setColumnWidth(5, 150); // 메모
+    
+    // 우선순위 열에 숫자 검증 추가
+    const priorityRange = emailSettingsSheet.getRange(2, 1, 1000, 1); // A2:A1001
+    const priorityValidation = SpreadsheetApp.newDataValidation()
+      .requireNumberGreaterThan(0)
+      .setAllowInvalid(false)
+      .build();
+    priorityRange.setDataValidation(priorityValidation);
+    
+    // 전송여부 열에 데이터 검증 추가 (TRUE/FALSE 드롭다운)
+    const validationRange = emailSettingsSheet.getRange(2, 2, 1000, 1); // B2:B1001
+    const validation = SpreadsheetApp.newDataValidation()
+      .requireValueInList(['TRUE', 'FALSE'])
+      .setAllowInvalid(false)
+      .build();
+    validationRange.setDataValidation(validation);
+    
+    // 테두리 추가
+    const dataRange = emailSettingsSheet.getRange(1, 1, sampleData.length + 1, headers.length);
+    dataRange.setBorder(true, true, true, true, true, true);
+    
+    // 시트 활성화
+    emailSettingsSheet.activate();
+    
+    // 사용자에게 안내 메시지
+    const ui = SpreadsheetApp.getUi();
+    ui.alert(
+      '✅ 이메일 설정 시트 생성 완료',
+      `'${sheetName}' 시트가 성공적으로 생성되었습니다.\n\n` +
+      '• 우선순위: 숫자가 작을수록 높은 우선순위입니다\n' +
+      '• 전송여부: TRUE로 설정된 사용자만 이메일을 받습니다\n' +
+      '• 샘플 데이터는 실제 데이터로 수정해주세요',
+      ui.ButtonSet.OK
+    );
+    
+    console.log('=== Function End: createEmailSettingsSheet SUCCESS ===');
+    return { success: true, message: '이메일 설정 시트가 생성되었습니다.' };
+    
+  } catch (error) {
+    console.error('ERROR in createEmailSettingsSheet:', error.toString());
+    console.log('=== Function End: createEmailSettingsSheet FAILED ===');
+    
+    const ui = SpreadsheetApp.getUi();
+    ui.alert(
+      '❌ 시트 생성 실패',
+      `이메일 설정 시트 생성에 실패했습니다:\n\n${error.toString()}`,
+      ui.ButtonSet.OK
+    );
+    
+    return { success: false, error: error.toString() };
+  }
+}
+
+/**
  * 스프레드시트 열 때 메뉴 생성
  */
 function onOpen() {
@@ -45,6 +158,7 @@ function onOpen() {
     .addSeparator()
     .addItem('⏰ 자동 실행 설정', 'setupTriggers')
     .addItem('🔧 설정', 'openSettings')
+    .addItem('📧 이메일 설정 시트 생성', 'createEmailSettingsSheet')
     .addSeparator()
     .addItem('🧪 테스트 - 최근 EDI 가져오기', 'testGetRecentEDI')
     .addItem('🧪 테스트 - 자동 업데이트 실행', 'testDailyUpdate')
@@ -501,4 +615,117 @@ function initializeConfig() {
   CONFIG.FOLDER_ID = settings.folderId;
   CONFIG.SENDER_POSTAL_CODE = settings.senderPostal;
   CONFIG.SENDER_ADDRESS = settings.senderAddress;
+}
+
+/**
+ * 이메일 설정 시트 생성
+ */
+function createEmailSettingsSheet() {
+  console.log('=== Function Start: createEmailSettingsSheet ===');
+  
+  try {
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    const sheetName = '이메일_설정';
+    
+    // 기존 시트가 있는지 확인
+    let emailSettingsSheet = spreadsheet.getSheetByName(sheetName);
+    
+    if (emailSettingsSheet) {
+      const ui = SpreadsheetApp.getUi();
+      const response = ui.alert(
+        '⚠️ 시트 이미 존재',
+        `'${sheetName}' 시트가 이미 존재합니다.\n\n기존 시트를 삭제하고 새로 만드시겠습니까?`,
+        ui.ButtonSet.YES_NO
+      );
+      
+      if (response === ui.Button.YES) {
+        spreadsheet.deleteSheet(emailSettingsSheet);
+        console.log('기존 이메일_설정 시트 삭제');
+      } else {
+        console.log('시트 생성 취소');
+        return { success: false, error: '사용자가 취소했습니다.' };
+      }
+    }
+    
+    // 새 시트 생성
+    emailSettingsSheet = spreadsheet.insertSheet(sheetName);
+    console.log('새 이메일_설정 시트 생성');
+    
+    // 헤더 설정
+    const headers = ['우선순위', '전송여부', '이름', '이메일', '메모'];
+    emailSettingsSheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    
+    // 헤더 스타일링
+    const headerRange = emailSettingsSheet.getRange(1, 1, 1, headers.length);
+    headerRange.setBackground('#4285f4');
+    headerRange.setFontColor('white');
+    headerRange.setFontWeight('bold');
+    headerRange.setHorizontalAlignment('center');
+    
+    // 샘플 데이터 추가
+    const sampleData = [
+      [1, 'TRUE', '김영준', 'example1@company.com', '담당자'],
+      [2, 'FALSE', '홍길동', 'example2@company.com', '백업 담당자'],
+      [3, 'TRUE', '이순신', 'example3@company.com', '관리자']
+    ];
+    
+    emailSettingsSheet.getRange(2, 1, sampleData.length, headers.length).setValues(sampleData);
+    
+    // 열 너비 조정
+    emailSettingsSheet.setColumnWidth(1, 80);  // 우선순위
+    emailSettingsSheet.setColumnWidth(2, 80);  // 전송여부
+    emailSettingsSheet.setColumnWidth(3, 100); // 이름
+    emailSettingsSheet.setColumnWidth(4, 200); // 이메일
+    emailSettingsSheet.setColumnWidth(5, 150); // 메모
+    
+    // 우선순위 열에 숫자 검증 추가
+    const priorityRange = emailSettingsSheet.getRange(2, 1, 1000, 1); // A2:A1001
+    const priorityValidation = SpreadsheetApp.newDataValidation()
+      .requireNumberGreaterThan(0)
+      .setAllowInvalid(false)
+      .build();
+    priorityRange.setDataValidation(priorityValidation);
+    
+    // 전송여부 열에 데이터 검증 추가 (TRUE/FALSE 드롭다운)
+    const validationRange = emailSettingsSheet.getRange(2, 2, 1000, 1); // B2:B1001
+    const validation = SpreadsheetApp.newDataValidation()
+      .requireValueInList(['TRUE', 'FALSE'])
+      .setAllowInvalid(false)
+      .build();
+    validationRange.setDataValidation(validation);
+    
+    // 테두리 추가
+    const dataRange = emailSettingsSheet.getRange(1, 1, sampleData.length + 1, headers.length);
+    dataRange.setBorder(true, true, true, true, true, true);
+    
+    // 시트 활성화
+    emailSettingsSheet.activate();
+    
+    // 사용자에게 안내 메시지
+    const ui = SpreadsheetApp.getUi();
+    ui.alert(
+      '✅ 이메일 설정 시트 생성 완료',
+      `'${sheetName}' 시트가 성공적으로 생성되었습니다.\n\n` +
+      '• 우선순위: 숫자가 작을수록 높은 우선순위입니다\n' +
+      '• 전송여부: TRUE로 설정된 사용자만 이메일을 받습니다\n' +
+      '• 샘플 데이터는 실제 데이터로 수정해주세요',
+      ui.ButtonSet.OK
+    );
+    
+    console.log('=== Function End: createEmailSettingsSheet SUCCESS ===');
+    return { success: true, message: '이메일 설정 시트가 생성되었습니다.' };
+    
+  } catch (error) {
+    console.error('ERROR in createEmailSettingsSheet:', error.toString());
+    console.log('=== Function End: createEmailSettingsSheet FAILED ===');
+    
+    const ui = SpreadsheetApp.getUi();
+    ui.alert(
+      '❌ 시트 생성 실패',
+      `이메일 설정 시트 생성에 실패했습니다:\n\n${error.toString()}`,
+      ui.ButtonSet.OK
+    );
+    
+    return { success: false, error: error.toString() };
+  }
 }

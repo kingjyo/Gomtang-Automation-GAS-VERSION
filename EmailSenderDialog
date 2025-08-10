@@ -490,22 +490,23 @@
       <!-- 드래그 앤 드롭 영역 -->
       <div class="upload-section">
         <div class="section-title">
-          📂 엑셀 파일 업로드
+          📊 엑셀 파일 첨부 (이메일 첨부용)
         </div>
         
         <div class="upload-area" id="uploadArea">
-          <button class="remove-file" onclick="removeFile()">✕</button>
-          <div class="upload-icon">📊</div>
-          <div class="upload-title">간편식 수기송장 엑셀 파일</div>
-          <div class="upload-description">파일을 여기에 드래그하거나 클릭하여 선택</div>
-          <div class="upload-hint">xlsx, xls 파일만 지원</div>
-          <input type="file" id="fileInput" class="file-input" accept=".xlsx,.xls">
+          <button class="remove-file" onclick="removeFile()" id="removeFileBtn">×</button>
+          <div class="upload-icon">📎</div>
+          <div class="upload-title">간편식 수기송장 엑셀 파일을 드래그하세요</div>
+          <div class="upload-description">또는 클릭하여 파일을 선택하세요</div>
+          <div class="upload-hint">이메일에 첨부할 엑셀 파일입니다<br>출고목록 내용은 스프레드시트 시트에서 자동으로 생성됩니다</div>
           
           <div class="file-info" id="fileInfo">
             <div class="file-name" id="fileName"></div>
             <div class="file-size" id="fileSize"></div>
           </div>
         </div>
+        
+        <input type="file" id="fileInput" class="file-input" accept=".xlsx,.xls">
       </div>
       
       <!-- 수신자 정보 섹션 -->
@@ -713,7 +714,7 @@
     // 이메일 전송
     function sendEmail() {
       if (!selectedFile) {
-        showMessage('엑셀 파일을 선택해주세요.', 'error');
+        showMessage('첨부할 엑셀 파일을 선택해주세요.', 'error');
         return;
       }
       
@@ -729,6 +730,7 @@
       
       showLoading('엑셀 파일을 처리하고 이메일을 전송하고 있습니다...');
       
+      // 파일을 Base64로 인코딩
       const reader = new FileReader();
       reader.onload = function(e) {
         const fileData = e.target.result.split(',')[1]; // Base64 데이터만 추출
@@ -739,9 +741,6 @@
             
             if (result.success) {
               showMessage(`✅ 이메일 전송 완료!\n\n받는 사람: ${result.recipientCount}명\n파일명: ${result.fileName}\n\n출고요청이 성공적으로 전송되었습니다.`, 'success');
-              
-              // 파일 초기화
-              removeFile();
             } else {
               showMessage(`이메일 전송 실패: ${result.error}`, 'error');
             }

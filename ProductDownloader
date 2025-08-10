@@ -461,11 +461,13 @@ const ProductDownloader = {
       // 헤더 행 제외하고 처리
       for (let i = 1; i < data.length; i++) {
         const row = data[i];
-        const order = parseInt(row[0] || 999); // A열: 순서 (기본값 999)
-        const name = String(row[1] || '').trim(); // B열: 이름
-        const email = String(row[2] || '').trim(); // C열: 이메일 주소
-        const memo = String(row[3] || '').trim(); // D열: 비고
-        const sendEnabled = Boolean(row[4]); // E열: 전송여부 (체크박스)
+        const order = parseInt(row[0] || 999); // A열: 우선순위 (기본값 999)
+        const sendEnabled = String(row[1] || '').toUpperCase() === 'TRUE'; // B열: 전송여부 (TRUE/FALSE)
+        const name = String(row[2] || '').trim(); // C열: 이름
+        const email = String(row[3] || '').trim(); // D열: 이메일 주소
+        const memo = String(row[4] || '').trim(); // E열: 메모
+        
+        console.log(`Processing row ${i}: order=${order}, sendEnabled=${sendEnabled}, name="${name}", email="${email}"`);
         
         if (name && email && email.includes('@') && sendEnabled) {
           recipients.push({
@@ -539,7 +541,7 @@ const ProductDownloader = {
       const attachment = DriveApp.getFileById(excelFileId);
       
       // 이메일 전송
-      const subject = `${dateString.substring(2,4)}.${dateString.substring(4,6)} 간편식 출고요청`;
+      const subject = `${dateString.substring(4,6)}.${dateString.substring(6,8)} 간편식 출고요청`;
       
       GmailApp.sendEmail(
         recipients, // 받는 사람 (콤마로 구분)
@@ -674,6 +676,7 @@ const ProductDownloader = {
     // 각 제품별 출고량 추가 (수량이 0인 것은 제외)
     const productLabels = {
       '사골고기곰탕5개입': '제동 사골고기곰탕 5개입',
+      '사골곰탕5개입': '제동 사골곰탕 5개입',
       '사골곰탕20개입': '제동 사골곰탕 20개입',
       '사골곰탕10개입': '제동 사골곰탕 10개입',
       '육포5개입': '제동한우 육포 5개입'

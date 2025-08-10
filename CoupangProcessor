@@ -109,6 +109,10 @@ const CoupangProcessor = {
       if (newRows.length > 0) {
         const lastRow = manualSheet.getLastRow();
         manualSheet.getRange(lastRow + 1, 1, newRows.length, newRows[0].length).setValues(newRows);
+        
+        // 검산결과 시트 업데이트
+        const verificationUpdate = this.updateVerificationSheetWithCoupang(datePrefix, coupangRows, coupangMapping);
+        console.log('검산결과 시트 업데이트 결과:', verificationUpdate);
       }
       
       return {
@@ -284,6 +288,193 @@ const CoupangProcessor = {
     } catch (error) {
       console.error('쿠팡 파일 이동 실패:', error);
     }
+  },
+
+  /**
+   * 검산결과 시트에 쿠팡 데이터 업데이트
+   */
+  updateVerificationSheetWithCoupang: function(datePrefix, coupangRows, coupangMapping) {
+    console.log('=== 검산결과 시트 쿠팡 데이터 업데이트 시작 ===');
+    
+    try {
+      const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+      const verificationSheetName = `${datePrefix}_검산결과`;
+      let verificationSheet = spreadsheet.getSheetByName(verificationSheetName);
+      
+      if (!verificationSheet) {
+        console.log(`⚠️ 검산결과 시트 없음: ${verificationSheetName}`);
+        return { success: false, error: `검산결과 시트를 찾을 수 없습니다: ${verificationSheetName}` };
+      }
+      
+      console.log(`✅ 검산결과 시트 발견: ${verificationSheetName}`);
+      
+      // H열과 I열 헤더 추가/확인
+      const currentYear = new Date().getFullYear();
+      const headerRow = verificationSheet.getRange(1, 1, 1, verificationSheet.getLastColumn() + 2).getValues()[0];
+      
+      // H열(7)에 "쿠팡" 헤더가 없으면 추가 (데이터 행에는 쿠팡 수량이 들어감)
+      if (!headerRow[7] || String(headerRow[7]).trim() !== '쿠팡') {
+        verificationSheet.getRange(1, 8).setValue('쿠팡');
+        console.log('H열에 "쿠팡" 헤더 추가');
+      }
+      
+      // I열(8)에 "MMDD 출고수량" 헤더가 없으면 추가
+      const mmdd = datePrefix.substring(4); // YYYYMMDD에서 MMDD 추출
+      const expectedHeader = `${mmdd} 출고수량`;
+      if (!headerRow[8] || String(headerRow[8]).trim() !== expectedHeader) {
+        verificationSheet.getRange(1, 9).setValue(expectedHeader);
+        console.log(`I열에 "${expectedHeader}" 헤더 추가`);
+      }
+      
+      // 쿠팡 제품별 수량 계산
+      const coupangProductQuantities = {};
+      
+      for (const row of coupangRows) {
+        const productName = String(row[coupangMapping.productName] || '').trim();
+        const quantity = parseInt(row[coupangMapping.quantity] || 0);
+        
+        if (productName && quantity > 0) {
+          console.log(`쿠팡 제품 발견: "${productName}" / 수량=${quantity}`);
+          
+          // 제품명 정규화
+          const normalizedProduct = this.normalizeCoupangProductName(productName);
+          if (normalizedProduct) {
+            if (!coupangProductQuantities[normalizedProduct]) {
+              coupangProductQuantities[normalizedProduct] = 0;
+            }
+            coupangProductQuantities[normalizedProduct] += quantity;
+            console.log(`정규화: "${productName}" → "${normalizedProduct}" (+${quantity})`);
+          } else {
+            console.log(`⚠️ 제품명 정규화 실패: "${productName}"`);
+          }
+        }
+      }
+      
+      console.log('쿠팡 제품별 수량:', JSON.stringify(coupangProductQuantities, null, 2));
+      
+      // 검산결과 시트에서 매칭되는 제품 찾아 업데이트
+      const data = verificationSheet.getDataRange().getValues();
+      let updatedCount = 0;
+      
+      for (let i = 1; i < data.length; i++) { // 헤더 제외
+        const row = data[i];
+        const verificationProductName = String(row[1] || '').trim(); // B열: 품목명
+        
+        if (verificationProductName) {
+          const normalizedVerificationProduct = this.normalizeCoupangProductName(verificationProductName);
+          
+          if (normalizedVerificationProduct && coupangProductQuantities[normalizedVerificationProduct]) {
+            // F열(5): 싸이버스카이 합계 수량 읽기
+            const cyberskyQuantity = parseInt(row[5] || 0);
+            const coupangQuantity = coupangProductQuantities[normalizedVerificationProduct];
+            const totalQuantity = cyberskyQuantity + coupangQuantity;
+            
+            // H열(7)에 쿠팡 수량 설정
+            verificationSheet.getRange(i + 1, 8).setValue(coupangQuantity);
+            
+            // I열(8)에 총 출고수량 설정
+            verificationSheet.getRange(i + 1, 9).setValue(totalQuantity);
+            
+            console.log(`업데이트: "${verificationProductName}" | 싸이버스카이: ${cyberskyQuantity} + 쿠팡: ${coupangQuantity} = 총: ${totalQuantity}`);
+            updatedCount++;
+          }
+        }
+      }
+      
+      // 검산결과 시트에 없는 쿠팡 제품들 새로 추가
+      const newProductsToAdd = [];
+      for (const [productName, quantity] of Object.entries(coupangProductQuantities)) {
+        let found = false;
+        
+        // 기존 행에서 찾기
+        for (let i = 1; i < data.length; i++) {
+          const verificationProductName = String(data[i][1] || '').trim();
+          const normalizedVerificationProduct = this.normalizeCoupangProductName(verificationProductName);
+          
+          if (normalizedVerificationProduct === productName) {
+            found = true;
+            break;
+          }
+        }
+        
+        // 없으면 새로 추가할 목록에 포함
+        if (!found) {
+          const displayName = this.getDisplayNameFromNormalized(productName);
+          newProductsToAdd.push([
+            '', // A열: 빈값
+            displayName, // B열: 품목명
+            '', '', '', '', '', // C~G열: 빈값들
+            quantity, // H열: 쿠팡 수량
+            quantity // I열: 총 출고수량 (쿠팡만)
+          ]);
+          console.log(`새 제품 추가: "${displayName}" | 쿠팡: ${quantity}`);
+        }
+      }
+      
+      // 새 제품들을 시트에 추가
+      if (newProductsToAdd.length > 0) {
+        const lastRow = verificationSheet.getLastRow();
+        verificationSheet.getRange(lastRow + 1, 1, newProductsToAdd.length, newProductsToAdd[0].length).setValues(newProductsToAdd);
+        console.log(`${newProductsToAdd.length}개 신규 쿠팡 제품 추가`);
+      }
+      
+      const totalProcessed = updatedCount + newProductsToAdd.length;
+      console.log(`✅ 검산결과 시트 업데이트 완료: 기존 ${updatedCount}개 업데이트, 신규 ${newProductsToAdd.length}개 추가`);
+      
+      return {
+        success: true,
+        updatedCount: updatedCount,
+        newProductsAdded: newProductsToAdd.length,
+        totalProcessed: totalProcessed,
+        message: `검산결과 시트 업데이트 완료 (업데이트: ${updatedCount}, 신규: ${newProductsToAdd.length})`
+      };
+      
+    } catch (error) {
+      console.error('검산결과 시트 업데이트 실패:', error);
+      return {
+        success: false,
+        error: error.toString()
+      };
+    }
+  },
+
+  /**
+   * 쿠팡 제품명 정규화
+   */
+  normalizeCoupangProductName: function(productName) {
+    if (productName.includes('사골고기곰탕')) {
+      return '사골고기곰탕5개입';
+    }
+    else if (productName.includes('사골곰탕') && (productName.includes('20팩') || productName.includes('20개입'))) {
+      return '사골곰탕20개입';
+    }
+    else if (productName.includes('사골곰탕') && (productName.includes('10팩') || productName.includes('10개입'))) {
+      return '사골곰탕10개입';
+    }
+    else if (productName.includes('사골곰탕') && !productName.includes('사골고기곰탕') && 
+            (productName.includes('5팩') || productName.includes('5개입') || productName.includes('1박스'))) {
+      return '사골곰탕5개입';
+    }
+    else if (productName.includes('육포')) {
+      return '육포5개입';
+    }
+    
+    return null;
+  },
+
+  /**
+   * 정규화된 제품명을 표시용 이름으로 변환
+   */
+  getDisplayNameFromNormalized: function(normalizedName) {
+    const displayMap = {
+      '사골고기곰탕5개입': '제동 사골고기곰탕 (5팩 1세트)',
+      '사골곰탕5개입': '제동 사골곰탕 (5팩 1세트)',
+      '사골곰탕10개입': '제동 사골곰탕 (10팩 1세트)',
+      '사골곰탕20개입': '제동 사골곰탕 (20팩 1세트)',
+      '육포5개입': '제동한우 육포 (5팩 1세트)'
+    };
+    
+    return displayMap[normalizedName] || normalizedName;
   }
 };
 

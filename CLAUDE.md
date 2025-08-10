@@ -8,26 +8,47 @@ Google Apps Script (GAS) project for automating Korean food product (곰탕/Gomt
 
 ## Core Development Commands
 
+### Daily Pipeline Operations
 ```javascript
-// Daily automation pipeline
+// Core automation workflow
 updateCybersky()        // Import Cybersky data (A-Sheet)
 updateTodayEDI()       // Import today's EDI from Gmail (B-Sheet) 
 updateBoth()           // Run both imports + data processing
 runDataProcessor()     // Process A+B sheets → C sheet (invoice)
 runVerification()      // Cross-validate data consistency
 splitByProduct()       // Generate product-specific sheets
+```
 
-// Testing & debugging (TestFunctions.gs)
+### UI Dialog Functions  
+```javascript
+// Main interface dialogs (accessed via menu)
+openCoupangUploader()      // Upload Coupang marketplace data
+openProductDownloader()    // Download product-specific Excel sheets
+openLocalExcelUploader()   // Upload local Excel files for processing
+openEmailSender()         // Email shipment notifications
+openGooglePicker()        // Drive folder/file picker for setup
+openSettings()           // Configure system parameters
+```
+
+### Testing & Debugging
+```javascript
+// Test functions (TestFunctions.gs)
 testDailyUpdate()         // Test full daily workflow
 testCyberskyByDate()      // Test specific date (MMDD format)
 testEDIByDate()          // Test EDI for specific date  
 testFullProcessByDate()   // Test complete pipeline for date
 cleanTestSheets()        // Remove all TEST_ prefixed sheets
 
-// Configuration & UI
-setupTriggers()       // Set up daily 2 PM automation
-openSettings()        // Configure source spreadsheet/folder IDs
-initializeConfig()    // Load settings from PropertiesService
+// Utility testing
+testGetRecentEDI()       // Test Gmail EDI extraction
+clearTemplates()         // Reset template sheets
+```
+
+### Configuration & Setup
+```javascript
+setupTriggers()          // Set up daily 2 PM automation
+initializeConfig()       // Load settings from PropertiesService
+createEmailSettingsSheet() // Create email configuration sheet
 ```
 
 ## Architecture
@@ -50,19 +71,31 @@ The system processes three main data flows:
 - `Verification.gs`: Cross-validates totals between sheets
 - `ProductSpliter.gs`: Generates product-specific breakdowns
 
-### Module Dependencies
+### System Architecture Overview
 ```
-Main.gs (Central Controller & UI Menu)
-├── CyberskyData.gs     → A-Sheet: Customer orders from source spreadsheet
-├── EDIData.gs          → B-Sheet: Shipping data from Gmail attachments  
-├── DataProcessor.gs    → Core business logic: A+B → C transformation
-├── Verification.gs     → Quality assurance: Cross-sheet validation
-├── TestFunctions.gs    → Isolated testing with TEST_ prefixed sheets
-├── Triggers.gs         → Automated daily execution (2 PM)
-└── UI Components       → HTML dialogs for manual operations
-    ├── CoupangUploader → Coupang marketplace integration
-    ├── Settings        → Configuration management
-    └── GooglePicker    → Drive folder/file selection
+Main.gs (Central Controller & UI Menu - onOpen() creates menu)
+├── Core Data Processing
+│   ├── CyberskyData.gs     → A-Sheet: Customer orders from source spreadsheet
+│   ├── EDIData.gs          → B-Sheet: Shipping data from Gmail attachments  
+│   ├── DataProcessor.gs    → Core business logic: A+B → C transformation
+│   ├── Verification.gs     → Quality assurance: Cross-sheet validation
+│   └── ProductSpliter.gs   → Product-specific sheet generation
+├── Extended Functionality
+│   ├── CoupangProcessor.gs → Coupang marketplace data processing
+│   ├── EmailSender.gs      → Shipment notification system
+│   └── ProductDownloader.gs → Product-specific Excel export
+├── Testing & Development
+│   └── TestFunctions.gs    → Isolated testing with TEST_ prefixed sheets
+├── Automation & Config
+│   ├── Triggers.gs         → Automated daily execution (2 PM)
+│   └── Settings.gs         → PropertiesService configuration management
+└── UI Components (HTML Dialogs)
+    ├── CoupangUploader + CoupangUploaderDialog
+    ├── EmailSender + EmailSenderDialog  
+    ├── ProductDownloader + ProductDownloaderDialog
+    ├── ExcelUploaderProcessor + ExcelUploaderDialog
+    ├── GooglePicker + PickerDialog + PickerClient
+    └── DriveExplorer + DriveExplorer. (file management)
 ```
 
 ### Critical Data Processing Rules
@@ -126,6 +159,27 @@ function exampleFunction(param1, param2) {
 
 **Required return format**: `{ success: boolean, data/error: any }`
 
+## Extended Features
+
+### Coupang Integration (`CoupangProcessor.gs`)
+- Processes Coupang marketplace Excel files via `processCoupangFile()`
+- Converts uploaded files to Google Sheets format
+- Integrates Coupang delivery data with manual invoice system
+- Supports Base64 file upload through HTML dialog
+
+### Email Notification System (`EmailSender.gs`)
+- Automated shipment notifications via `processExcelAndSendEmail()`
+- Extracts shipment data from current spreadsheet
+- Supports date-specific processing (MMDD or YYYYMMDD formats)
+- Integrates with `ProductDownloader.getEmailRecipients()` for recipient management
+- Requires '이메일_설정' sheet for configuration
+
+### Product-Specific Export (`ProductDownloader.gs`)
+- Downloads product-specific sheets as Excel files
+- Supported products: `['사골고기곰탕', '사골곰탕', '육포']`
+- Creates consolidated Excel files for individual product categories
+- Handles both current date and date-specific exports
+
 ## Product Name Normalization
 The system handles various product name formats through `DataProcessor.convertProductName()` and `normalizeProductName()`:
 
@@ -138,3 +192,20 @@ The system handles various product name formats through `DataProcessor.convertPr
 - **EDI Time Window**: Additional EDI check if current time is 13:00-15:30  
 - **Logging**: All automation results logged to "업데이트_로그" sheet (keeps last 100 entries)
 - **Manual Override**: All automation functions can be called manually via menu
+
+## UI Dialog Architecture
+The system uses paired `.gs` processor files with corresponding HTML dialog files:
+
+### File Pairing Pattern
+- **CoupangProcessor.gs** ↔ **CoupangUploaderDialog** → Marketplace data upload
+- **EmailSender.gs** ↔ **EmailSenderDialog** → Shipment notification interface  
+- **ProductDownloader.gs** ↔ **ProductDownloaderDialog** → Product export interface
+- **ExcelUploaderProcessor.gs** ↔ **ExcelUploaderDialog** → Local file upload
+- **GooglePicker.gs** + **PickerClient.gs** ↔ **PickerDialog** → Drive integration
+- **Settings.gs** → Direct dialog integration for configuration
+
+### Dialog Communication Pattern
+HTML dialogs use `google.script.run` to call corresponding processor functions and return results via success/error callbacks.
+
+## Development Guidelines
+**After completing tasks, always report the modified file names only (e.g., "Modified files: Main, ProductDownloader")**
