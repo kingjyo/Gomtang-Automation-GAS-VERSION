@@ -374,3 +374,184 @@ function testWithDate() {
     SpreadsheetApp.getUi().alert('❌ 날짜 지정 테스트 오류: ' + error.toString());
   }
 }
+
+/**
+ * 완전 자동화 파이프라인 트리거 설정 (이메일까지 포함)
+ */
+function setupCompleteAutomationTrigger() {
+  try {
+    // 기존 완전 자동화 트리거 제거 (권한 문제로 인해 try-catch 처리)
+    try {
+      removeCompleteAutomationTriggers();
+    } catch (permissionError) {
+      console.log('기존 완전 자동화 트리거 확인 권한 없음, 새 트리거만 생성:', permissionError.toString());
+    }
+    
+    // 매일 오후 2시 30분 실행 트리거 생성 (기본 트리거보다 30분 늦게)
+    const trigger = ScriptApp.newTrigger('completeAutomationPipeline')
+      .timeBased()
+      .everyDays(1)
+      .atHour(14)
+      .nearMinute(30) // 2시 30분
+      .create();
+    
+    console.log('새 완전 자동화 트리거 생성됨:', trigger.getUniqueId());
+    
+    SpreadsheetApp.getUi().alert(
+      '✅ 완전 자동화 트리거 설정 완료!\n\n' +
+      '🔄 매일 오후 2시 30분 실행 과정:\n' +
+      '1️⃣ 싸이버스카이 데이터 수집\n' +
+      '2️⃣ EDI 데이터 처리\n' +
+      '3️⃣ 데이터 가공 및 검산\n' +
+      '4️⃣ 품목별 시트 생성\n' +
+      '5️⃣ 엑셀 파일 생성\n' +
+      '6️⃣ 자동 이메일 전송\n\n' +
+      '📧 모든 과정이 자동으로 실행되어 이메일이 발송됩니다!\n\n' +
+      '⚠️ 참고: 기존 트리거가 있다면 Google Apps Script 편집기에서 수동으로 삭제해주세요.'
+    );
+    
+  } catch (error) {
+    console.error('완전 자동화 트리거 설정 실패:', error);
+    SpreadsheetApp.getUi().alert('❌ 완전 자동화 트리거 설정 실패: ' + error.toString() + '\n\nGoogle Apps Script 편집기에서 직접 트리거를 설정해보세요.');
+  }
+}
+
+/**
+ * 완전 자동화 트리거 제거 (권한이 있는 경우에만)
+ */
+function removeCompleteAutomationTriggers() {
+  try {
+    const triggers = ScriptApp.getProjectTriggers();
+    let removedCount = 0;
+    
+    triggers.forEach(trigger => {
+      if (trigger.getHandlerFunction() === 'completeAutomationPipeline') {
+        ScriptApp.deleteTrigger(trigger);
+        removedCount++;
+        console.log('완전 자동화 트리거 삭제됨:', trigger.getUniqueId());
+      }
+    });
+    
+    console.log(`총 ${removedCount}개의 기존 완전 자동화 트리거 삭제 완료`);
+    return { success: true, removedCount };
+    
+  } catch (error) {
+    console.error('완전 자동화 트리거 제거 실패 (권한 부족 가능성):', error.toString());
+    throw error; // 상위 함수에서 처리하도록
+  }
+}
+
+/**
+ * 완전 자동화 파이프라인 실행 함수 (트리거용)
+ */
+function completeAutomationPipeline() {
+  try {
+    console.log('=== 완전 자동화 파이프라인 시작 ===');
+    logUpdate('🚀 완전 자동화 파이프라인 시작', { success: true, time: new Date().toLocaleString('ko-KR') });
+    
+    // 설정 초기화
+    initializeConfig();
+    
+    // 1. 싸이버스카이 데이터 업데이트
+    const cyberskyResult = CyberskyData.updateCyberskyData();
+    logUpdate('1️⃣ 싸이버스카이 데이터 업데이트', cyberskyResult);
+    
+    if (!cyberskyResult.success) {
+      logUpdate('⚠️ 완전 자동화 파이프라인 중단: 싸이버스카이 데이터 실패', cyberskyResult);
+      return;
+    }
+    
+    // 2. EDI 데이터 업데이트
+    const ediResult = EDIData.updateEDIData();
+    logUpdate('2️⃣ EDI 데이터 업데이트', ediResult);
+    
+    // EDI 실패해도 계속 진행 (싸이버스카이 데이터만으로도 처리 가능)
+    
+    // 3. 데이터 처리 (A+B → C 시트)
+    const processResult = DataProcessor.processData();
+    logUpdate('3️⃣ 데이터 처리 (A+B→C)', processResult);
+    
+    if (!processResult.success) {
+      logUpdate('⚠️ 완전 자동화 파이프라인 중단: 데이터 처리 실패', processResult);
+      return;
+    }
+    
+    // 4. 검산 실행
+    const verifyResult = Verification.runVerification();
+    logUpdate('4️⃣ 검산 실행', verifyResult);
+    
+    // 5. 품목별 분할
+    try {
+      const splitResult = ProductSpliter.splitByProduct();
+      logUpdate('5️⃣ 품목별 분할', splitResult);
+    } catch (splitError) {
+      logUpdate('5️⃣ 품목별 분할 (선택적)', { success: false, error: splitError.toString() });
+    }
+    
+    // 6. 품목별 시트 생성 및 엑셀 다운로드
+    const downloadResult = ProductDownloader.downloadProductSheets();
+    logUpdate('6️⃣ 품목별 엑셀 생성', downloadResult);
+    
+    if (!downloadResult.success) {
+      logUpdate('⚠️ 완전 자동화 파이프라인 중단: 엑셀 생성 실패', downloadResult);
+      return;
+    }
+    
+    // 7. 자동 이메일 전송
+    const emailResult = sendEmailWithProductSheets();
+    logUpdate('7️⃣ 자동 이메일 전송', emailResult);
+    
+    if (emailResult.success) {
+      logUpdate('🎉 완전 자동화 파이프라인 성공!', {
+        success: true,
+        completedSteps: [
+          '싸이버스카이수집',
+          'EDI처리',
+          '데이터가공',
+          '검산',
+          '품목별생성',
+          '엑셀생성',
+          '이메일전송'
+        ],
+        time: new Date().toLocaleString('ko-KR')
+      });
+    } else {
+      logUpdate('⚠️ 이메일 전송 실패하지만 데이터 처리는 완료', emailResult);
+    }
+    
+  } catch (error) {
+    console.error('완전 자동화 파이프라인 오류:', error);
+    logUpdate('❌ 완전 자동화 파이프라인 오류', { success: false, error: error.toString() });
+  }
+}
+
+/**
+ * 수동으로 완전 자동화 파이프라인 실행 (메뉴용)
+ */
+function manualCompleteAutomation() {
+  try {
+    const ui = SpreadsheetApp.getUi();
+    const response = ui.alert(
+      '🚀 완전 자동화 실행',
+      '전체 파이프라인을 실행하시겠습니까?\n\n' +
+      '실행 과정:\n' +
+      '• 싸이버스카이 데이터 수집\n' +
+      '• EDI 데이터 처리\n' +
+      '• 데이터 가공 및 검산\n' +
+      '• 품목별 시트 생성\n' +
+      '• 엑셀 파일 생성\n' +
+      '• 자동 이메일 전송\n\n' +
+      '⚠️ 이 작업은 시간이 걸릴 수 있습니다.',
+      ui.ButtonSet.YES_NO
+    );
+    
+    if (response === ui.Button.YES) {
+      ui.alert('🔄 완전 자동화 파이프라인을 시작합니다.\n업데이트_로그 시트에서 진행상황을 확인하세요.');
+      completeAutomationPipeline();
+    }
+    
+  } catch (error) {
+    console.error('수동 완전 자동화 실행 오류:', error);
+    SpreadsheetApp.getUi().alert('❌ 실행 오류: ' + error.toString());
+  }
+}

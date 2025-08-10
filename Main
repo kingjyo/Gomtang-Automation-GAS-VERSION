@@ -157,6 +157,8 @@ function onOpen() {
     .addItem('📁 드라이브로 초기 설정', 'openGooglePicker')
     .addSeparator()
     .addItem('⏰ 자동 실행 설정', 'setupTriggers')
+    .addItem('🚀 완전 자동화 트리거 설정', 'setupCompleteAutomationTrigger')
+    .addItem('▶️ 완전 자동화 수동 실행', 'manualCompleteAutomation')
     .addItem('🔧 설정', 'openSettings')
     .addItem('📧 이메일 설정 시트 생성', 'createEmailSettingsSheet')
     .addSeparator()
