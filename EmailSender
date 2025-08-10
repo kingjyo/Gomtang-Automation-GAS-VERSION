@@ -126,7 +126,7 @@ const EmailSender = {
   },
 
   /**
-   * 스프레드시트에서 출고 데이터 추출 (싸이버스카이 시트 + 검산결과 시트)
+   * 스프레드시트에서 출고 데이터 추출 (싸이버스카이 시트 + 쿠팡 데이터만)
    */
   extractShipmentDataFromSpreadsheet: function(spreadsheet, dateString) {
     console.log(`=== 스프레드시트에서 출고 데이터 추출: ${dateString} ===`);
@@ -169,43 +169,7 @@ const EmailSender = {
       // 싸이버스카이 데이터 처리
       const cyberskyResult = this.processCyberskySheet(cyberskySheet, shipmentData, logEntries);
       
-      // 2. EDI 시트에서 데이터 읽기 (있는 경우)
-      const ediSheetName = `${dateString}_간편식_EDI`;
-      const ediSheet = spreadsheet.getSheetByName(ediSheetName);
-      
-      console.log(`🔍 EDI 시트 찾기: ${ediSheetName}`);
-      logEntries.push(`🔍 EDI 시트 찾기: ${ediSheetName}`);
-      
-      if (ediSheet) {
-        console.log(`✅ EDI 시트 발견: ${ediSheet.getName()}`);
-        logEntries.push(`✅ EDI 시트 발견: ${ediSheet.getName()}`);
-        
-        // EDI 시트 처리
-        const ediResult = this.processEDISheet(ediSheet, shipmentData, logEntries);
-      } else {
-        console.log(`⚠️ EDI 시트 없음 - EDI 데이터 건너뛰기`);
-        logEntries.push(`⚠️ EDI 시트 없음 - EDI 데이터 건너뛰기`);
-      }
-
-      // 3. 수기송장 시트에서 데이터 읽기 (있는 경우)
-      const manualSheetName = `${dateString}_간편식_수기송장`;
-      const manualSheet = spreadsheet.getSheetByName(manualSheetName);
-      
-      console.log(`🔍 수기송장 시트 찾기: ${manualSheetName}`);
-      logEntries.push(`🔍 수기송장 시트 찾기: ${manualSheetName}`);
-      
-      if (manualSheet) {
-        console.log(`✅ 수기송장 시트 발견: ${manualSheet.getName()}`);
-        logEntries.push(`✅ 수기송장 시트 발견: ${manualSheet.getName()}`);
-        
-        // 수기송장 시트 처리
-        const manualResult = this.processManualSheet(manualSheet, shipmentData, logEntries);
-      } else {
-        console.log(`⚠️ 수기송장 시트 없음 - 수기송장 데이터 건너뛰기`);
-        logEntries.push(`⚠️ 수기송장 시트 없음 - 수기송장 데이터 건너뛰기`);
-      }
-
-      // 4. 검산결과 시트에서 쿠팡 데이터 읽기 (있는 경우)
+      // 2. 검산결과 시트에서 쿠팡 데이터 읽기 (있는 경우) - EDI/수기송장은 출고목록에 포함 안 함
       const verificationSheetName = `${dateString}_검산결과`;
       const verificationSheet = spreadsheet.getSheetByName(verificationSheetName);
       
@@ -555,148 +519,7 @@ const EmailSender = {
     return processedRows;
   },
 
-  /**
-   * EDI 시트 처리
-   */
-  processEDISheet: function(ediSheet, shipmentData, logEntries) {
-    console.log('📋 EDI 시트 데이터 처리 시작');
-    logEntries.push('📋 EDI 시트 데이터 처리 시작');
-    
-    const data = ediSheet.getDataRange().getValues();
-    console.log(`  └─ 시트 크기: ${data.length} 행 x ${data[0] ? data[0].length : 0} 열`);
-    logEntries.push(`  └─ 시트 크기: ${data.length} 행 x ${data[0] ? data[0].length : 0} 열`);
-    
-    if (data.length <= 1) {
-      console.log(`  └─ ⚠️ 데이터 없음`);
-      logEntries.push(`  └─ ⚠️ 데이터 없음`);
-      return;
-    }
-    
-    // 고정 열 인덱스 사용 (사용자 명세에 따라)
-    const productColIndex = 15; // P열: 상품명 (|로 분리된 경우 첫 부분) (0-based index)
-    const quantityColIndex = 16; // Q열: 수량 (0-based index)
-    
-    const headers = data[0];
-    console.log(`  └─ 📍 고정 열 사용 - P열(${productColIndex}): ${headers[productColIndex]}, Q열(${quantityColIndex}): ${headers[quantityColIndex]}`);
-    logEntries.push(`  └─ 📍 고정 열 사용 - P열(${productColIndex}): ${headers[productColIndex]}, Q열(${quantityColIndex}): ${headers[quantityColIndex]}`);
-    
-    let processedRows = 0;
-    
-    // 데이터 행 처리
-    for (let i = 1; i < data.length; i++) {
-      const row = data[i];
-      const productNameRaw = String(row[productColIndex] || '');
-      const quantity = parseInt(row[quantityColIndex] || 0);
-      
-      // 상품명에서 | 앞 부분만 추출
-      const productName = productNameRaw.includes('|') ? productNameRaw.split('|')[0].trim() : productNameRaw.trim();
-      
-      if (quantity > 0 && productName) {
-        // console.log(`    🔍 행 ${i}: "${productName}" (원본: "${productNameRaw}") / 수량=${quantity}`);
-        // logEntries.push(`    🔍 행 ${i}: "${productName}" (원본: "${productNameRaw}") / 수량=${quantity}`);
-        
-        const normalizedProduct = this.normalizeProductName(productName);
-        
-        if (normalizedProduct && shipmentData[normalizedProduct]) {
-          shipmentData[normalizedProduct].cybersky += quantity; // EDI도 일반적으로 cybersky로 분류
-          shipmentData[normalizedProduct].total += quantity;
-          processedRows++;
-          // console.log(`    ➕ 추가: ${normalizedProduct} +${quantity} (EDI) → 총계: ${shipmentData[normalizedProduct].total}`);
-          // logEntries.push(`    ➕ 추가: ${normalizedProduct} +${quantity} (EDI) → 총계: ${shipmentData[normalizedProduct].total}`);
-        } else {
-          console.log(`    ❌ 매칭 실패: "${productName}"`);
-          logEntries.push(`    ❌ 매칭 실패: "${productName}"`);
-        }
-      }
-    }
-    
-    const ediSummary = Object.keys(shipmentData).map(key => 
-      `${key}: +${shipmentData[key].edi}개`
-    ).join(', ');
-    console.log(`✅ EDI 처리 완료: ${processedRows}개 행 처리 (${ediSummary})`);
-    logEntries.push(`✅ EDI 처리 완료: ${processedRows}개 행 처리 (${ediSummary})`);
-    
-    return processedRows;
-  },
 
-  /**
-   * 수기송장 시트 처리
-   */
-  processManualSheet: function(manualSheet, shipmentData, logEntries) {
-    console.log('📋 수기송장 시트 데이터 처리 시작');
-    logEntries.push('📋 수기송장 시트 데이터 처리 시작');
-    
-    // 처리 전 현재 카운트 저장
-    const originalCounts = {};
-    Object.keys(shipmentData).forEach(key => {
-      originalCounts[key] = shipmentData[key].cybersky;
-    });
-    
-    const data = manualSheet.getDataRange().getValues();
-    console.log(`  └─ 시트 크기: ${data.length} 행 x ${data[0] ? data[0].length : 0} 열`);
-    logEntries.push(`  └─ 시트 크기: ${data.length} 행 x ${data[0] ? data[0].length : 0} 열`);
-    
-    if (data.length <= 1) {
-      console.log(`  └─ ⚠️ 데이터 없음`);
-      logEntries.push(`  └─ ⚠️ 데이터 없음`);
-      return;
-    }
-    
-    // 고정 열 인덱스 사용 (사용자 명세에 따라)
-    const productColIndex = 13; // N열: 품목명 (0-based index)
-    const quantityColIndex = 12; // M열: 수량 (0-based index)
-    const memoColIndex = 18; // S열: 메모1 (쿠팡 마킹) (0-based index)
-    
-    const headers = data[0];
-    console.log(`  └─ 📍 고정 열 사용 - N열(${productColIndex}): ${headers[productColIndex]}, M열(${quantityColIndex}): ${headers[quantityColIndex]}, S열(${memoColIndex}): ${headers[memoColIndex]}`);
-    logEntries.push(`  └─ 📍 고정 열 사용 - N열(${productColIndex}): ${headers[productColIndex]}, M열(${quantityColIndex}): ${headers[quantityColIndex]}, S열(${memoColIndex}): ${headers[memoColIndex]}`);
-    
-    let processedRows = 0;
-    
-    // 데이터 행 처리
-    for (let i = 1; i < data.length; i++) {
-      const row = data[i];
-      const productName = String(row[productColIndex] || '');
-      const quantity = parseInt(row[quantityColIndex] || 0);
-      const memo = String(row[memoColIndex] || '').trim();
-      
-      if (quantity > 0 && productName) {
-        // console.log(`    🔍 행 ${i}: "${productName}" / 수량=${quantity} / 메모="${memo}"`);
-        // logEntries.push(`    🔍 행 ${i}: "${productName}" / 수량=${quantity} / 메모="${memo}"`);
-        
-        const normalizedProduct = this.normalizeProductName(productName);
-        
-        if (normalizedProduct && shipmentData[normalizedProduct]) {
-          const category = memo === '쿠팡' ? 'coupang' : 'cybersky';
-          shipmentData[normalizedProduct][category] += quantity;
-          shipmentData[normalizedProduct].total += quantity;
-          processedRows++;
-          // console.log(`    ➕ 추가: ${normalizedProduct} +${quantity} (${category}) → 총계: ${shipmentData[normalizedProduct].total}`);
-          // logEntries.push(`    ➕ 추가: ${normalizedProduct} +${quantity} (${category}) → 총계: ${shipmentData[normalizedProduct].total}`);
-        } else {
-          console.log(`    ❌ 매칭 실패: "${productName}"`);
-          logEntries.push(`    ❌ 매칭 실패: "${productName}"`);
-        }
-      }
-    }
-    
-    const manualSummary = Object.keys(shipmentData).map(key => {
-      const cyberskyCount = shipmentData[key].cybersky - (originalCounts[key] || 0);
-      const coupangCount = shipmentData[key].coupang;
-      if (cyberskyCount > 0 && coupangCount > 0) {
-        return `${key}: +${cyberskyCount}개(일반) +${coupangCount}개(쿠팡)`;
-      } else if (cyberskyCount > 0) {
-        return `${key}: +${cyberskyCount}개`;
-      } else if (coupangCount > 0) {
-        return `${key}: +${coupangCount}개(쿠팡)`;
-      }
-      return null;
-    }).filter(Boolean).join(', ');
-    console.log(`✅ 수기송장 처리 완료: ${processedRows}개 행 처리 (${manualSummary})`);
-    logEntries.push(`✅ 수기송장 처리 완료: ${processedRows}개 행 처리 (${manualSummary})`);
-    
-    return processedRows;
-  },
 
   /**
    * 검산결과 시트에서 쿠팡 데이터 처리
