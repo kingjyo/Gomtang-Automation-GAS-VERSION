@@ -162,7 +162,7 @@ function executeFullAutomationPipeline() {
     
     if (downloadResult.success) {
       // 2. 자동 이메일 전송
-      const emailResult = ProductDownloader.sendEmailWithProductSheets();
+      const emailResult = sendEmailWithProductSheets();
       logUpdate('자동 이메일 전송', emailResult);
       
       if (emailResult.success) {
@@ -203,7 +203,7 @@ function executeBasicAutomationPipeline() {
     
     // 3. 싸이버스카이 데이터만으로 이메일 전송 시도
     try {
-      const emailResult = ProductDownloader.sendEmailWithProductSheets();
+      const emailResult = sendEmailWithProductSheets();
       logUpdate('기본 이메일 전송 (싸이버스카이만)', emailResult);
       
       if (emailResult.success) {

@@ -952,9 +952,9 @@ function getEmailRecipients() {
 }
 
 /**
-   * 자동 이메일 전송 (트리거용) - 품목별 시트 생성하고 이메일로 전송
-   */
-  sendEmailWithProductSheets: function(targetDate) {
+ * 자동 이메일 전송 (트리거용) - 품목별 시트 생성하고 이메일로 전송
+ */
+function sendEmailWithProductSheets(targetDate) {
     console.log('=== 자동 이메일 전송 시작 ===');
     
     try {
@@ -978,7 +978,7 @@ function getEmailRecipients() {
       console.log('자동 이메일 전송 날짜:', dateString);
       
       // 1. 품목별 시트 생성 및 다운로드
-      const downloadResult = this.downloadProductSheets(targetDate);
+      const downloadResult = ProductDownloader.downloadProductSheets(targetDate);
       
       if (!downloadResult.success) {
         return {
@@ -989,7 +989,7 @@ function getEmailRecipients() {
       }
       
       // 2. 이메일 수신자 목록 가져오기
-      const recipientsResult = this.getEmailRecipients();
+      const recipientsResult = ProductDownloader.getEmailRecipients();
       if (!recipientsResult.success) {
         return {
           success: false,
@@ -1007,7 +1007,7 @@ function getEmailRecipients() {
       }
       
       // 3. 출고 데이터 수집
-      const shipmentData = this.collectShipmentData(dateString);
+      const shipmentData = ProductDownloader.collectShipmentData(dateString);
       if (!shipmentData.success) {
         return {
           success: false,
@@ -1017,7 +1017,7 @@ function getEmailRecipients() {
       }
       
       // 4. 이메일 내용 생성
-      const emailContent = this.generateEmailContent(shipmentData.data, dateString);
+      const emailContent = ProductDownloader.generateEmailContent(shipmentData.data, dateString);
       
       // 5. 첨부 파일 준비 (생성된 엑셀 파일)
       const excelFileId = downloadResult.downloadInfo.fileId;
@@ -1057,8 +1057,7 @@ function getEmailRecipients() {
         step: 'emailSending'
       };
     }
-  }
-};
+}
 
 // 이메일 전송 (HtmlService에서 호출)
 function sendShipmentEmail(targetDate, recipients, excelFileId, fileName) {
