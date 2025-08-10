@@ -162,6 +162,65 @@ function logUpdate(message, details) {
  * 수동 테스트 실행
  */
 function testDailyUpdate() {
-  dailyUpdate();
-  SpreadsheetApp.getUi().alert('테스트 실행 완료!\n업데이트_로그 시트에서 결과를 확인하세요.');
+  try {
+    console.log('=== 수동 테스트 실행 시작 ===');
+    dailyUpdate();
+    
+    // 실행 결과 확인
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    const logSheet = spreadsheet.getSheetByName('업데이트_로그');
+    
+    let resultMessage = '테스트 실행 완료!\n업데이트_로그 시트에서 결과를 확인하세요.';
+    
+    if (logSheet) {
+      const lastRow = logSheet.getLastRow();
+      if (lastRow > 1) {
+        const lastEntry = logSheet.getRange(lastRow, 1, 1, 4).getValues()[0];
+        const [timestamp, action, status, details] = lastEntry;
+        resultMessage += `\n\n최근 로그:\n시간: ${timestamp}\n작업: ${action}\n상태: ${status}`;
+      }
+    }
+    
+    SpreadsheetApp.getUi().alert(resultMessage);
+    console.log('=== 수동 테스트 완료 ===');
+    
+  } catch (error) {
+    console.error('테스트 실행 오류:', error);
+    SpreadsheetApp.getUi().alert('❌ 테스트 실행 실패: ' + error.toString());
+  }
+}
+
+/**
+ * 즉시 테스트 (시간 무관)
+ */
+function immediateTest() {
+  try {
+    console.log('=== 즉시 테스트 시작 ===');
+    
+    // 설정 초기화
+    initializeConfig();
+    
+    // 현재 시간 표시
+    const now = new Date();
+    console.log('현재 시간:', now.toLocaleString('ko-KR'));
+    
+    // 싸이버스카이 데이터 업데이트 시도
+    const cyberskyResult = CyberskyData.updateCyberskyData();
+    console.log('싸이버스카이 결과:', cyberskyResult);
+    
+    // 결과 로깅
+    logUpdate('수동 즉시 테스트', cyberskyResult);
+    
+    // UI 알림
+    const message = cyberskyResult.success 
+      ? `✅ 즉시 테스트 성공!\n시트: ${cyberskyResult.sheetName}\n행 수: ${cyberskyResult.rowCount}` 
+      : `❌ 즉시 테스트 실패:\n${cyberskyResult.error}`;
+      
+    SpreadsheetApp.getUi().alert(message);
+    
+  } catch (error) {
+    console.error('즉시 테스트 오류:', error);
+    logUpdate('즉시 테스트 오류', { success: false, error: error.toString() });
+    SpreadsheetApp.getUi().alert('❌ 즉시 테스트 오류: ' + error.toString());
+  }
 }

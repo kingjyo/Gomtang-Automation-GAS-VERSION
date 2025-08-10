@@ -162,6 +162,7 @@ function onOpen() {
     .addSeparator()
     .addItem('🧪 테스트 - 최근 EDI 가져오기', 'testGetRecentEDI')
     .addItem('🧪 테스트 - 자동 업데이트 실행', 'testDailyUpdate')
+    .addItem('⚡ 테스트 - 즉시 실행 (시간무관)', 'immediateTest')
     .addItem('🧪 테스트 - 템플릿 시트 초기화', 'clearTemplates')
     .addToUi();
 }
