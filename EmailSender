@@ -92,13 +92,17 @@ const EmailSender = {
       const subject = `${dateString.substring(4,6)}.${dateString.substring(6,8)} 간편식 출고요청`;
       const recipients = recipientsResult.recipients.map(r => r.email).join(',');
       
+      // 설정에서 발신자 표시 이름 가져오기
+      const settings = getSettings();
+      const senderDisplayName = settings.emailSenderDisplayName || '김영준[CJUJBGS - KIM YOUNG JOON]';
+      
       GmailApp.sendEmail(
         recipients,
         subject,
         emailContent,
         {
           attachments: [attachmentBlob],
-          name: '한국공항 김영준'
+          name: senderDisplayName
         }
       );
       

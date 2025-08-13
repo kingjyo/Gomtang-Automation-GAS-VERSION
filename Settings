@@ -178,19 +178,25 @@
     <div class="form-group">
       <label for="emailSenderName">이메일 발신자 이름</label>
       <input type="text" id="emailSenderName" placeholder="예: 김영준">
-      <div class="help-text">이메일 본문에 표시될 이름</div>
+      <div class="help-text">이메일 본문 시작 및 서명에 사용될 이름</div>
     </div>
     
     <div class="form-group">
-      <label for="emailSenderTitle">이메일 발신자 직급/소속</label>
-      <input type="text" id="emailSenderTitle" placeholder="예: 한국공항 사원">
-      <div class="help-text">이메일 본문에 표시될 직급이나 소속</div>
+      <label for="emailSenderTitle">이메일 발신자 직급</label>
+      <input type="text" id="emailSenderTitle" placeholder="예: 사원">
+      <div class="help-text">한국공항 뒤에 붙을 직급 (예: "사원", "대리", "과장")</div>
     </div>
     
     <div class="form-group">
       <label for="emailSenderSignature">이메일 서명</label>
       <input type="text" id="emailSenderSignature" placeholder="예: 김영준">
-      <div class="help-text">이메일 마지막 서명 부분 (예: "김영준 드림"의 "김영준")</div>
+      <div class="help-text">이메일 마지막 서명 부분 ("김영준 드림"에서 "김영준")</div>
+    </div>
+    
+    <div class="form-group">
+      <label for="emailSenderDisplayName">이메일 발신자 표시 이름</label>
+      <input type="text" id="emailSenderDisplayName" placeholder="예: 김영준[CJUJBGS - KIM YOUNG JOON]">
+      <div class="help-text">받은편지함에서 보이는 발신자 이름 (예: "김영준[CJUJBGS - KIM YOUNG JOON]")</div>
     </div>
     
     <div class="loading" id="loading">
@@ -222,6 +228,7 @@
             document.getElementById('emailSenderName').value = settings.emailSenderName || '';
             document.getElementById('emailSenderTitle').value = settings.emailSenderTitle || '';
             document.getElementById('emailSenderSignature').value = settings.emailSenderSignature || '';
+            document.getElementById('emailSenderDisplayName').value = settings.emailSenderDisplayName || '';
           }
         })
         .withFailureHandler(function(error) {
@@ -238,7 +245,8 @@
         senderAddress: document.getElementById('senderAddress').value,
         emailSenderName: document.getElementById('emailSenderName').value,
         emailSenderTitle: document.getElementById('emailSenderTitle').value,
-        emailSenderSignature: document.getElementById('emailSenderSignature').value
+        emailSenderSignature: document.getElementById('emailSenderSignature').value,
+        emailSenderDisplayName: document.getElementById('emailSenderDisplayName').value
       };
       
       // 유효성 검사

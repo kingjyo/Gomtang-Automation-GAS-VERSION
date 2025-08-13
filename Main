@@ -155,22 +155,25 @@ function onOpen() {
     .addItem('📥 품목별 다운로더 열기', 'openProductDownloader')
     .addItem('📤 로컬 엑셀 업로더 열기', 'openLocalExcelUploader')
     .addItem('📧 이메일 전송기 열기', 'openEmailSender')
-    .addItem('📁 드라이브로 초기 설정', 'openGooglePicker')
+    .addSeparator()
+    .addSubMenu(ui.createMenu('⚙️ 설정')
+      .addItem('🔧 시스템 설정 (이메일 발신자 포함)', 'openSettings')
+      .addItem('📧 이메일 수신자 설정 시트 생성', 'createEmailSettingsSheet')
+      .addItem('📁 드라이브 폴더 설정', 'openGooglePicker'))
     .addSeparator()
     .addItem('🚀 통합 워크플로우 실행 (추천)', 'executeSeamlessWorkflow')
+    .addItem('🏃 전체 파이프라인 즉시 실행', 'executeImmediateFullPipeline')
+    .addItem('1️⃣ Part 1만 실행 (쿠팡 이전 단계)', 'executePart1Only')
+    .addItem('2️⃣ Part 2만 실행 (쿠팡 이후 단계)', 'executePart2Only')
+    .addItem('⏰ 트리거 자동화 설정 (쿠팡 선택적)', 'openTriggerCoupangUploader')
     .addSeparator()
-    .addItem('🛍️ 전체 파이프라인 즉시 실행', 'executeImmediateFullPipeline')
-    .addItem('🛍️ 트리거용 쿠팡 업로더', 'openTriggerCoupangUploader')
-    .addSeparator()
-    .addItem('⚙️ 시스템 설정', 'openSettings')
-    .addItem('📧 이메일 설정 시트 생성', 'createEmailSettingsSheet')
-    .addSeparator()
-    .addItem('🧪 테스트 - 최근 EDI 가져오기', 'testGetRecentEDI')
-    .addItem('🧪 테스트 - 자동 업데이트 실행', 'testDailyUpdate')
-    .addItem('⚡ 테스트 - 즉시 실행 (시간무관)', 'immediateTest')
-    .addItem('📅 테스트 - 날짜 지정 (과거데이터)', 'testWithDate')
-    .addItem('🚀 테스트 - 자동 트리거 테스트', 'testTriggerAutomation')
-    .addItem('🧪 테스트 - 템플릿 시트 초기화', 'clearTemplates')
+    .addSubMenu(ui.createMenu('🧪 테스트')
+      .addItem('최근 EDI 가져오기', 'testGetRecentEDI')
+      .addItem('자동 업데이트 실행', 'testDailyUpdate')
+      .addItem('즉시 실행 (시간무관)', 'immediateTest')
+      .addItem('날짜 지정 (과거데이터)', 'testWithDate')
+      .addItem('자동 트리거 테스트', 'testTriggerAutomation')
+      .addItem('템플릿 시트 초기화', 'clearTemplates'))
     .addSeparator()
     .addItem('🗑️ 일일 시트 정리', 'cleanupDailySheets')
     .addItem('📅 날짜별 시트 정리', 'cleanupDateSheets')
@@ -1059,4 +1062,368 @@ function testTriggerAutomation() {
     
     console.log('=== Function End: testTriggerAutomation FAILED ===');
   }
+}
+
+/**
+ * Part 1만 실행 (쿠팡 이전 단계)
+ */
+function executePart1Only() {
+  console.log('=== Function Start: executePart1Only ===');
+  
+  try {
+    const ui = SpreadsheetApp.getUi();
+    
+    // 날짜 선택
+    const dateResponse = ui.alert(
+      '📅 Part 1 실행 - 날짜 선택',
+      '어떤 날짜의 데이터로 Part 1을 실행하시겠습니까?\n\n예: 오늘 날짜 (자동)\n아니오: 날짜 직접 지정',
+      ui.ButtonSet.YES_NO_CANCEL
+    );
+    
+    if (dateResponse === ui.Button.CANCEL) {
+      return;
+    }
+    
+    let targetDate = null;
+    if (dateResponse === ui.Button.NO) {
+      const inputResponse = ui.prompt(
+        '날짜 입력',
+        'MMDD 형식으로 입력하세요 (예: 0812, 1225)',
+        ui.ButtonSet.OK_CANCEL
+      );
+      
+      if (inputResponse.getSelectedButton() !== ui.Button.OK) {
+        return;
+      }
+      
+      targetDate = inputResponse.getResponseText().trim();
+      if (targetDate && !/^\d{4}$/.test(targetDate)) {
+        ui.alert('오류', '잘못된 날짜 형식입니다. MMDD 형식으로 입력해주세요.', ui.ButtonSet.OK);
+        return;
+      }
+    }
+    
+    const dateStr = targetDate ? `${targetDate.substring(0,2)}월 ${targetDate.substring(2,4)}일` : '오늘';
+    
+    // 실행 확인
+    const confirmResponse = ui.alert(
+      '1️⃣ Part 1 실행',
+      `Part 1 파이프라인을 실행하시겠습니까?\n\n처리 날짜: ${dateStr}\n\n실행 과정:\n• 싸이버스카이 데이터 수집\n• EDI 데이터 처리\n• 데이터 가공 및 검산`,
+      ui.ButtonSet.YES_NO
+    );
+    
+    if (confirmResponse !== ui.Button.YES) {
+      return;
+    }
+    
+    ui.alert(
+      '🔄 Part 1 시작',
+      `Part 1 파이프라인을 시작합니다.\n날짜: ${dateStr}\n\n업데이트_로그 시트에서 진행상황을 확인하세요.`,
+      ui.ButtonSet.OK
+    );
+    
+    // 설정 초기화
+    initializeConfig();
+    
+    logUpdate('🚀 Part 1 실행 시작', {
+      success: true,
+      targetDate: dateStr,
+      time: new Date().toLocaleString('ko-KR')
+    });
+    
+    // Part 1 실행 (TriggerManagement.gs의 함수 사용)
+    const part1Result = targetDate 
+      ? executeFullPart1PipelineWithDate(targetDate)
+      : executeFullPart1Pipeline();
+    
+    if (part1Result.success) {
+      logUpdate('✅ Part 1 실행 완료!', part1Result);
+      ui.alert(
+        '완료',
+        `Part 1이 성공적으로 완료되었습니다!\n\n날짜: ${dateStr}\n\n쿠팡 파일이 준비되면 "2️⃣ Part 2만 실행" 메뉴를 이용하세요.`,
+        ui.ButtonSet.OK
+      );
+    } else {
+      throw new Error(part1Result.error || '알 수 없는 오류');
+    }
+    
+    console.log('=== Function End: executePart1Only SUCCESS ===');
+    
+  } catch (error) {
+    console.error('ERROR in executePart1Only:', error.toString());
+    logUpdate('❌ Part 1 실행 실패', { success: false, error: error.toString() });
+    
+    const ui = SpreadsheetApp.getUi();
+    ui.alert('오류', 'Part 1 실행 실패: ' + error.toString(), ui.ButtonSet.OK);
+    
+    console.log('=== Function End: executePart1Only FAILED ===');
+  }
+}
+
+/**
+ * Part 2만 실행 (쿠팡 이후 단계)
+ */
+function executePart2Only() {
+  console.log('=== Function Start: executePart2Only ===');
+  
+  try {
+    const ui = SpreadsheetApp.getUi();
+    
+    // 쿠팡 파일 업로드 여부 확인
+    const fileResponse = ui.alert(
+      '🛍️ Part 2 실행 - 쿠팡 파일',
+      'Part 2 파이프라인을 실행합니다.\n\n쿠팡 파일을 업로드하시겠습니까?\n\n예: 쿠팡 파일 업로더 열기\n아니오: 쿠팡 파일 없이 Part 2 실행',
+      ui.ButtonSet.YES_NO_CANCEL
+    );
+    
+    if (fileResponse === ui.Button.CANCEL) {
+      return;
+    }
+    
+    let hasCoupangFile = (fileResponse === ui.Button.YES);
+    
+    // 날짜 선택
+    const dateResponse = ui.alert(
+      '📅 처리 날짜 선택',
+      '어떤 날짜의 데이터로 Part 2를 실행하시겠습니까?\n\n예: 오늘 날짜 (자동)\n아니오: 날짜 직접 지정',
+      ui.ButtonSet.YES_NO_CANCEL
+    );
+    
+    if (dateResponse === ui.Button.CANCEL) {
+      return;
+    }
+    
+    let targetDate = null;
+    if (dateResponse === ui.Button.NO) {
+      const inputResponse = ui.prompt(
+        '날짜 입력',
+        'MMDD 형식으로 입력하세요 (예: 0812, 1225)',
+        ui.ButtonSet.OK_CANCEL
+      );
+      
+      if (inputResponse.getSelectedButton() !== ui.Button.OK) {
+        return;
+      }
+      
+      targetDate = inputResponse.getResponseText().trim();
+      if (targetDate && !/^\d{4}$/.test(targetDate)) {
+        ui.alert('오류', '잘못된 날짜 형식입니다. MMDD 형식으로 입력해주세요.', ui.ButtonSet.OK);
+        return;
+      }
+    }
+    
+    const dateStr = targetDate ? `${targetDate.substring(0,2)}월 ${targetDate.substring(2,4)}일` : '오늘';
+    
+    if (hasCoupangFile) {
+      // 쿠팡 파일과 함께 Part 2 실행
+      ui.alert(
+        '📤 쿠팡 파일 업로드',
+        `Part 2 파이프라인을 시작합니다.\n\n처리 날짜: ${dateStr}\n\n먼저 쿠팡 파일을 업로드해주세요.\n업로드 완료 후 Part 2가 실행됩니다.`,
+        ui.ButtonSet.OK
+      );
+      
+      // targetDate를 전역 속성에 저장 (쿠팡 업로더에서 사용)
+      if (targetDate) {
+        PropertiesService.getScriptProperties().setProperty('PART2_TARGET_DATE', targetDate);
+      } else {
+        PropertiesService.getScriptProperties().deleteProperty('PART2_TARGET_DATE');
+      }
+      
+      // Part 2용 쿠팡 업로더 열기
+      openPart2CoupangUploader(targetDate);
+      
+    } else {
+      // 쿠팡 파일 없이 Part 2 실행
+      const confirmResponse = ui.alert(
+        '2️⃣ Part 2 실행 (쿠팡 없음)',
+        `쿠팡 파일 없이 Part 2를 실행하시겠습니까?\n\n처리 날짜: ${dateStr}\n\n실행 과정:\n• 품목별 시트 분리\n• 엑셀 파일 생성\n• 이메일 전송`,
+        ui.ButtonSet.YES_NO
+      );
+      
+      if (confirmResponse !== ui.Button.YES) {
+        return;
+      }
+      
+      ui.alert(
+        '🔄 Part 2 시작 (쿠팡 없음)',
+        `쿠팡 데이터 없이 Part 2를 시작합니다.\n날짜: ${dateStr}\n\n업데이트_로그 시트에서 진행상황을 확인하세요.`,
+        ui.ButtonSet.OK
+      );
+      
+      // 설정 초기화
+      initializeConfig();
+      
+      logUpdate('🚀 Part 2 실행 시작 (쿠팡 없음)', {
+        success: true,
+        targetDate: dateStr,
+        time: new Date().toLocaleString('ko-KR')
+      });
+      
+      // Part 2 실행 (쿠팡 없이)
+      const part2Result = executePart2WithoutCoupang(targetDate);
+      
+      if (part2Result.success) {
+        logUpdate('✅ Part 2 실행 완료! (쿠팡 없음)', part2Result);
+        ui.alert(
+          '완료',
+          `Part 2가 성공적으로 완료되었습니다!\n\n날짜: ${dateStr}\n\n• 품목별 시트 분리 ✅\n• 엑셀 파일 생성 ✅\n• 이메일 전송 ✅\n\n(쿠팡 데이터는 포함되지 않았습니다)`,
+          ui.ButtonSet.OK
+        );
+      } else {
+        throw new Error(part2Result.error || '알 수 없는 오류');
+      }
+    }
+    
+    console.log('=== Function End: executePart2Only SUCCESS ===');
+    
+  } catch (error) {
+    console.error('ERROR in executePart2Only:', error.toString());
+    logUpdate('❌ Part 2 실행 실패', { success: false, error: error.toString() });
+    
+    const ui = SpreadsheetApp.getUi();
+    ui.alert('오류', 'Part 2 실행 실패: ' + error.toString(), ui.ButtonSet.OK);
+    
+    console.log('=== Function End: executePart2Only FAILED ===');
+  }
+}
+
+/**
+ * Part 2용 쿠팡 업로더 열기 
+ */
+function openPart2CoupangUploader(targetDate = null) {
+  console.log('=== Function Start: openPart2CoupangUploader ===');
+  console.log('Target Date:', targetDate);
+  
+  try {
+    // targetDate를 전역 속성에 임시 저장
+    if (targetDate) {
+      PropertiesService.getScriptProperties().setProperty('PART2_TARGET_DATE', targetDate);
+    } else {
+      PropertiesService.getScriptProperties().deleteProperty('PART2_TARGET_DATE');
+    }
+    
+    const html = HtmlService.createHtmlOutputFromFile('Part2CoupangUploader')
+      .setWidth(650)
+      .setHeight(500)
+      .setTitle('🛍️ Part 2용 쿠팡 업로더');
+    SpreadsheetApp.getUi().showModalDialog(html, '🛍️ Part 2용 쿠팡 업로더');
+    
+    console.log('=== Function End: openPart2CoupangUploader SUCCESS ===');
+    
+  } catch (error) {
+    console.error('ERROR in openPart2CoupangUploader:', error.toString());
+    
+    // HTML 파일이 없는 경우 기존 쿠팡 업로더 사용
+    console.log('Part2CoupangUploader 파일이 없어 기존 업로더 사용');
+    openCoupangUploader();
+    
+    console.log('=== Function End: openPart2CoupangUploader FALLBACK ===');
+  }
+}
+
+/**
+ * Part 2용 쿠팡 파일 처리 및 나머지 과정 실행
+ */
+function processPart2CoupangFileAndContinue(fileData, fileName) {
+  console.log('=== Function Start: processPart2CoupangFileAndContinue ===');
+  console.log('Parameters:', { fileName });
+  
+  try {
+    // 임시 저장된 날짜 가져오기
+    const targetDate = PropertiesService.getScriptProperties().getProperty('PART2_TARGET_DATE');
+    const dateStr = targetDate ? `${targetDate.substring(0,2)}월 ${targetDate.substring(2,4)}일` : '오늘';
+    
+    // 설정 초기화
+    initializeConfig();
+    
+    logUpdate('🚀 Part 2 쿠팡 파일 처리 시작', {
+      success: true,
+      fileName,
+      targetDate: dateStr,
+      time: new Date().toLocaleString('ko-KR')
+    });
+    
+    // 1. 쿠팡 파일 처리 
+    logUpdate('📦 쿠팡 데이터 처리', { success: true, fileName });
+    const coupangResult = CoupangProcessor.processCoupangFile(fileData, fileName);
+    
+    if (!coupangResult.success) {
+      throw new Error('쿠팡 파일 처리 실패: ' + coupangResult.error);
+    }
+    
+    logUpdate('✅ 쿠팡 데이터 처리 완료', coupangResult);
+    
+    // 2. 품목별 분리
+    logUpdate('📊 품목별 시트 분리 시작', { success: true });
+    const splitResult = ProductSpliter.splitByProduct();
+    
+    if (!splitResult.success) {
+      throw new Error('품목별 분리 실패: ' + splitResult.error);
+    }
+    
+    logUpdate('✅ 품목별 시트 분리 완료', splitResult);
+    
+    // 3. 엑셀 파일 생성
+    logUpdate('📁 엑셀 파일 생성 시작', { success: true });
+    const downloadResult = ProductDownloader.downloadProductSheets(targetDate);
+    
+    if (!downloadResult.success) {
+      throw new Error('엑셀 파일 생성 실패: ' + downloadResult.error);
+    }
+    
+    logUpdate('✅ 엑셀 파일 생성 완료', downloadResult);
+    
+    // 4. 이메일 전송
+    logUpdate('📧 출고 이메일 전송 시작', { success: true });
+    const emailResult = sendEmailWithProductSheets(targetDate);
+    
+    if (!emailResult.success) {
+      // 이메일 실패는 경고만
+      logUpdate('⚠️ 이메일 전송 실패 (수동 전송 필요)', emailResult);
+    } else {
+      logUpdate('✅ 출고 이메일 전송 완료', emailResult);
+    }
+    
+    // 임시 저장된 날짜 정리
+    PropertiesService.getScriptProperties().deleteProperty('PART2_TARGET_DATE');
+    
+    console.log('=== Function End: processPart2CoupangFileAndContinue SUCCESS ===');
+    
+    const finalMessage = `✅ Part 2 완료!\n\n날짜: ${dateStr}\n파일: ${fileName}\n\n• 쿠팡 데이터 처리 ✅\n• 품목별 시트 분리 ✅\n• 엑셀 파일 생성 ✅\n• 이메일 전송 ${emailResult.success ? '✅' : '⚠️'}\n\n모든 과정이 완료되었습니다!`;
+    
+    return {
+      success: true,
+      message: finalMessage,
+      coupangResult,
+      splitResult,
+      downloadResult,
+      emailResult,
+      targetDate: dateStr,
+      fileName
+    };
+    
+  } catch (error) {
+    console.error('ERROR in processPart2CoupangFileAndContinue:', error.toString());
+    logUpdate('❌ Part 2 쿠팡 처리 실패', { success: false, error: error.toString(), fileName });
+    
+    // 임시 저장된 날짜 정리
+    PropertiesService.getScriptProperties().deleteProperty('PART2_TARGET_DATE');
+    
+    console.log('=== Function End: processPart2CoupangFileAndContinue FAILED ===');
+    return {
+      success: false,
+      error: error.toString()
+    };
+  }
+}
+
+/**
+ * Part 2 타겟 날짜 가져오기 (HTML에서 사용)
+ */
+function getPart2TargetDate() {
+  const targetDate = PropertiesService.getScriptProperties().getProperty('PART2_TARGET_DATE');
+  return {
+    targetDate: targetDate || null,
+    dateString: targetDate ? `${targetDate.substring(0,2)}월 ${targetDate.substring(2,4)}일` : '오늘'
+  };
 }

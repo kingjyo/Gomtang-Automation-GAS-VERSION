@@ -543,9 +543,9 @@ const ProductDownloader = {
       // 이메일 전송
       const subject = `${dateString.substring(4,6)}.${dateString.substring(6,8)} 간편식 출고요청`;
       
-      // 발신자 이름 설정
+      // 설정에서 발신자 표시 이름 가져오기
       const settings = getSettings();
-      const senderDisplayName = `${settings.emailSenderTitle || '한국공항 사원'} ${settings.emailSenderName || '김영준'}`;
+      const senderDisplayName = settings.emailSenderDisplayName || '김영준[CJUJBGS - KIM YOUNG JOON]';
       
       GmailApp.sendEmail(
         recipients, // 받는 사람 (콤마로 구분)
@@ -758,7 +758,7 @@ const ProductDownloader = {
     // 설정에서 발신자 정보 가져오기
     const settings = getSettings();
     const senderName = settings.emailSenderName || '김영준';
-    const senderTitle = settings.emailSenderTitle || '한국공항 사원';
+    const senderTitle = settings.emailSenderTitle || '사원';
     const signature = settings.emailSenderSignature || senderName;
     
     // 날짜 포맷팅 (YY.MM)
@@ -767,7 +767,7 @@ const ProductDownloader = {
     const day = dateString.substring(6, 8);
     
     // 이메일 본문 시작 (HTML 없이 순수 텍스트)
-    let emailBody = `안녕하세요 ${senderTitle} ${senderName}입니다
+    let emailBody = `안녕하세요 한국공항 ${senderName} ${senderTitle}입니다
 금일 간편식 출고요청 드립니다
 
 금일 출고목록
@@ -1037,9 +1037,9 @@ function sendEmailWithProductSheets(targetDate) {
       const subject = `${dateString.substring(4,6)}.${dateString.substring(6,8)} 간편식 출고요청`;
       const recipients = recipientsResult.recipients.map(r => r.email).join(',');
       
-      // 발신자 이름 설정
+      // 설정에서 발신자 표시 이름 가져오기
       const settings = getSettings();
-      const senderDisplayName = `${settings.emailSenderTitle || '한국공항 사원'} ${settings.emailSenderName || '김영준'} (자동시스템)`;
+      const senderDisplayName = settings.emailSenderDisplayName || '김영준[CJUJBGS - KIM YOUNG JOON]';
       
       GmailApp.sendEmail(
         recipients,

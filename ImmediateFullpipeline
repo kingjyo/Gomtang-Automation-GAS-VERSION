@@ -18,7 +18,7 @@ function executeImmediateFullPipeline() {
     // 1. 먼저 쿠팡 파일 업로드 여부 확인
     const fileResponse = ui.alert(
       '🛍️ 쿠팡 파일 업로드',
-      '전체 파이프라인을 실행합니다.\n\n쿠팡 파일을 업로드하시겠습니까?\n\n예: 쿠팡 파일 업로더 열기\n아니오: 쿠팡 파일 없이 Part 1만 실행',
+      '전체 파이프라인을 실행합니다.\n\n쿠팡 파일을 업로드하시겠습니까?\n\n예: 쿠팡 파일 업로더 열기\n아니오: 쿠팡 파일 없이 전체 파이프라인 실행',
       ui.ButtonSet.YES_NO_CANCEL
     );
     
@@ -80,10 +80,10 @@ function executeImmediateFullPipeline() {
       openImmediateCoupangUploader(targetDate);
       
     } else {
-      // 쿠팡 파일 없이 Part 1만 실행
+      // 쿠팡 파일 없이 전체 파이프라인 실행 (쿠팡 업로드만 제외)
       const confirmResponse = ui.alert(
-        '🔄 Part 1 실행',
-        `Part 1 파이프라인을 실행하시겠습니까?\n\n처리 날짜: ${dateStr}\n\n실행 과정:\n• 싸이버스카이 데이터 수집\n• EDI 데이터 처리\n• 데이터 가공 및 검산`,
+        '🔄 전체 파이프라인 실행 (쿠팡 제외)',
+        `쿠팡 파일 없이 전체 파이프라인을 실행하시겠습니까?\n\n처리 날짜: ${dateStr}\n\n실행 과정:\n• 싸이버스카이 데이터 수집\n• EDI 데이터 처리\n• 데이터 가공 및 검산\n• 품목별 시트 분리\n• 엑셀 다운로드\n• 이메일 전송`,
         ui.ButtonSet.YES_NO
       );
       
@@ -92,15 +92,15 @@ function executeImmediateFullPipeline() {
       }
       
       ui.alert(
-        '🔄 Part 1 시작',
-        `Part 1 파이프라인을 시작합니다.\n날짜: ${dateStr}\n\n업데이트_로그 시트에서 진행상황을 확인하세요.`,
+        '🔄 전체 파이프라인 시작 (쿠팡 제외)',
+        `쿠팡 데이터 없이 전체 파이프라인을 시작합니다.\n날짜: ${dateStr}\n\n업데이트_로그 시트에서 진행상황을 확인하세요.`,
         ui.ButtonSet.OK
       );
       
       // 설정 초기화
       initializeConfig();
       
-      logUpdate('🚀 Part 1 즉시 실행 시작', {
+      logUpdate('🚀 전체 파이프라인 즉시 실행 시작 (쿠팡 없음)', {
         success: true,
         targetDate: dateStr,
         time: new Date().toLocaleString('ko-KR')
@@ -111,15 +111,24 @@ function executeImmediateFullPipeline() {
         ? executeFullPart1PipelineWithDate(targetDate)
         : executeFullPart1Pipeline();
       
-      if (part1Result.success) {
-        logUpdate('✅ Part 1 즉시 실행 완료!', part1Result);
+      if (!part1Result.success) {
+        throw new Error('Part 1 파이프라인 실패: ' + part1Result.error);
+      }
+      
+      logUpdate('✅ Part 1 완료 - 쿠팡 없이 Part 2 진행', part1Result);
+      
+      // Part 2 실행 (쿠팡 없이)
+      const part2Result = executePart2WithoutCoupang(targetDate);
+      
+      if (part2Result.success) {
+        logUpdate('✅ 전체 파이프라인 완료! (쿠팡 없음)', part2Result);
         ui.alert(
           '완료',
-          `Part 1이 성공적으로 완료되었습니다!\n\n날짜: ${dateStr}\n\n쿠팡 파일이 준비되면 "2️⃣ Part 2만 실행" 메뉴를 이용하세요.`,
+          `전체 파이프라인이 성공적으로 완료되었습니다!\n\n날짜: ${dateStr}\n\n• 싸이버스카이 + EDI 처리 ✅\n• 검산 완료 ✅\n• 품목별 시트 분리 ✅\n• 엑셀 파일 생성 ✅\n• 이메일 전송 ✅\n\n(쿠팡 데이터는 포함되지 않았습니다)`,
           ui.ButtonSet.OK
         );
       } else {
-        throw new Error(part1Result.error || '알 수 없는 오류');
+        throw new Error(part2Result.error || '알 수 없는 오류');
       }
     }
     
@@ -255,6 +264,70 @@ function getImmediateTargetDate() {
     targetDate: targetDate || null,
     dateString: targetDate ? `${targetDate.substring(0,2)}월 ${targetDate.substring(2,4)}일` : '오늘'
   };
+}
+
+/**
+ * 쿠팡 파일 없이 Part 2 실행 (품목분리, 엑셀생성, 이메일전송)
+ */
+function executePart2WithoutCoupang(targetDate) {
+  console.log('=== Function Start: executePart2WithoutCoupang ===');
+  console.log('Target Date:', targetDate);
+  
+  try {
+    // 날짜 처리
+    const dateString = targetDate ? convertToFullDate(targetDate) : getTodayDate();
+    
+    // 1. 품목별 분리
+    logUpdate('📦 품목별 시트 분리 시작 (쿠팡 없음)', { success: true });
+    const splitResult = ProductSpliter.splitByProduct();
+    
+    if (!splitResult.success) {
+      throw new Error('품목별 분리 실패: ' + splitResult.error);
+    }
+    
+    logUpdate('✅ 품목별 시트 분리 완료', splitResult);
+    
+    // 2. 엑셀 파일 생성
+    logUpdate('📊 엑셀 파일 생성 시작', { success: true });
+    const downloadResult = ProductDownloader.downloadProductSheets(targetDate);
+    
+    if (!downloadResult.success) {
+      throw new Error('엑셀 파일 생성 실패: ' + downloadResult.error);
+    }
+    
+    logUpdate('✅ 엑셀 파일 생성 완료', downloadResult);
+    
+    // 3. 이메일 전송
+    logUpdate('📧 출고 이메일 전송 시작', { success: true });
+    const emailResult = sendEmailWithProductSheets(targetDate);
+    
+    if (!emailResult.success) {
+      // 이메일 실패는 경고만
+      logUpdate('⚠️ 이메일 전송 실패 (수동 전송 필요)', emailResult);
+    } else {
+      logUpdate('✅ 출고 이메일 전송 완료', emailResult);
+    }
+    
+    console.log('=== Function End: executePart2WithoutCoupang SUCCESS ===');
+    return {
+      success: true,
+      message: 'Part 2 완료 (쿠팡 없이)',
+      splitResult,
+      downloadResult,
+      emailResult,
+      dateString
+    };
+    
+  } catch (error) {
+    console.error('ERROR in executePart2WithoutCoupang:', error.toString());
+    logUpdate('❌ Part 2 실행 실패 (쿠팡 없음)', { success: false, error: error.toString() });
+    
+    console.log('=== Function End: executePart2WithoutCoupang FAILED ===');
+    return {
+      success: false,
+      error: error.toString()
+    };
+  }
 }
 
 /**

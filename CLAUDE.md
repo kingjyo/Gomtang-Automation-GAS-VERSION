@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Google Apps Script (GAS) project for automating Korean food product (곰탕/Gomtang) order processing and shipping invoice generation. Integrates data from Cybersky, EDI emails, and Coupang marketplace into standardized shipping formats.
 
+**Note**: This is a Google Apps Script project. All files without extensions are GAS files that would normally have a `.gs` extension in the Apps Script editor.
+
 ## Core Development Commands
 
 ### Daily Pipeline Operations
@@ -69,7 +71,10 @@ createEmailSettingsSheet() // Create email configuration sheet
 
 // Advanced Trigger Management (TriggerManagement.gs)
 createTodayAutoTrigger(fileId, fileName, hour, minute)  // Create single-use trigger
+createTodayAutoTriggerWithDate(fileId, fileName, hour, minute, targetDate) // Create trigger with specific date (MMDD)
 executeTriggerCoupangAutomation()    // Trigger execution function
+executeTriggerCoupangAutomationWithDate() // Execute with date-specific processing
+executeFullPart1PipelineWithDate(targetDate) // Part 1 with date (MMDD or null for today)
 deleteTriggerAndCleanup()            // Clean up after trigger completion
 scheduleRetryTrigger()               // Schedule 30-min retry on failure
 retryTriggerAutomation()             // Retry trigger function (max 3 attempts)
@@ -112,14 +117,19 @@ Main.gs (Central Controller & UI Menu - onOpen() creates menu)
 │   └── TestFunctions.gs    → Isolated testing with TEST_ prefixed sheets
 ├── Automation & Config
 │   ├── Triggers.gs         → Automated daily execution (2 PM)
+│   ├── TriggerManagement.gs → Date-specific trigger management
 │   └── Settings.gs         → PropertiesService configuration management
 └── UI Components (HTML Dialogs)
     ├── CoupangUploader + CoupangUploaderDialog
+    ├── CoupangUploaderSeamless → Seamless workflow automation
+    ├── TriggerCoupangUploader → Trigger-based Coupang upload
+    ├── ImmediateCoupangUploader → Immediate execution handler
+    ├── ImmediateFullpipeline → Full pipeline immediate execution
     ├── EmailSender + EmailSenderDialog  
     ├── ProductDownloader + ProductDownloaderDialog
     ├── ExcelUploaderProcessor + ExcelUploaderDialog
     ├── GooglePicker + PickerDialog + PickerClient
-    └── DriveExplorer + DriveExplorer. (file management)
+    └── SheetCleaner → Sheet cleanup utilities
 ```
 
 ### Critical Data Processing Rules
@@ -252,6 +262,11 @@ HTML dialogs use `google.script.run` to call corresponding processor functions a
 
 ## Development Guidelines
 
+### File Naming Convention
+- All files in this repository are Google Apps Script files (`.gs` in Apps Script editor)
+- Files without extensions are intentionally named this way for version control
+- When referencing files in code, use the exact filename without extension
+
 ### Code Maintenance
 - **Function Naming**: Use consistent object names matching filenames (e.g., `ProductSpliter.splitByProduct()`)
 - **Error Handling**: All functions must return `{ success: boolean, data/error: any }` format
@@ -262,5 +277,11 @@ HTML dialogs use `google.script.run` to call corresponding processor functions a
 - **Duplicate Functions**: Remove duplicate function definitions (common in Main.gs after merges)
 - **Object Name Mismatches**: Ensure object names match their filename (ProductSpliter vs ProductSplitter)
 - **Missing Dependencies**: Global helper functions in Main.gs are shared across all files
+- **Date Format**: Always use MMDD format for date parameters (e.g., "1205" for December 5th)
+
+### Testing Strategy
+- Use `testFullProcessByDate("MMDD")` for date-specific testing
+- Run `cleanTestSheets()` after testing to remove TEST_ prefixed sheets
+- Never deploy code without running tests first
 
 **After completing tasks, always report the modified file names only (e.g., "Modified files: Main, ProductDownloader")**

@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 20px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+    }
+    
+    .container {
+      background: white;
+      border-radius: 10px;
+      padding: 30px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+    }
+    
+    h2 {
+      color: #333;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    
+    .upload-area {
+      border: 3px dashed #667eea;
+      border-radius: 10px;
+      padding: 40px;
+      text-align: center;
+      transition: all 0.3s ease;
+      background: #f8f9fa;
+      cursor: pointer;
+    }
+    
+    .upload-area:hover {
+      background: #e9ecef;
+      border-color: #764ba2;
+    }
+    
+    .upload-area.dragover {
+      background: #e3f2fd;
+      border-color: #2196f3;
+      transform: scale(1.02);
+    }
+    
+    .upload-icon {
+      font-size: 48px;
+      color: #667eea;
+      margin-bottom: 10px;
+    }
+    
+    .upload-text {
+      color: #666;
+      font-size: 16px;
+      margin-bottom: 10px;
+    }
+    
+    .file-input {
+      display: none;
+    }
+    
+    .file-info {
+      margin-top: 20px;
+      padding: 15px;
+      background: #f1f3f5;
+      border-radius: 5px;
+      display: none;
+    }
+    
+    .file-info.show {
+      display: block;
+    }
+    
+    .file-name {
+      font-weight: bold;
+      color: #333;
+      margin-bottom: 10px;
+    }
+    
+    .progress-bar {
+      width: 100%;
+      height: 20px;
+      background: #e9ecef;
+      border-radius: 10px;
+      overflow: hidden;
+      margin-top: 10px;
+      display: none;
+    }
+    
+    .progress-bar.show {
+      display: block;
+    }
+    
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #667eea, #764ba2);
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+    
+    .button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 12px 30px;
+      border-radius: 5px;
+      font-size: 16px;
+      cursor: pointer;
+      margin-top: 20px;
+      transition: transform 0.2s ease;
+    }
+    
+    .button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+    }
+    
+    .button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+    
+    .message {
+      margin-top: 20px;
+      padding: 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      line-height: 1.5;
+      font-weight: 500;
+      white-space: pre-line;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      display: none;
+    }
+    
+    .message.show {
+      display: block !important;
+    }
+    
+    .message.success {
+      background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+      color: #155724;
+      border: 2px solid #28a745;
+      animation: slideIn 0.5s ease;
+    }
+    
+    .message.error {
+      background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+      color: #721c24;
+      border: 2px solid #dc3545;
+      animation: slideIn 0.5s ease;
+    }
+    
+    .message.info {
+      background: linear-gradient(135deg, #d1ecf1 0%, #bee5eb 100%);
+      color: #0c5460;
+      border: 2px solid #17a2b8;
+      animation: slideIn 0.5s ease;
+    }
+    
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    .loading {
+      display: none;
+      text-align: center;
+      margin-top: 20px;
+    }
+    
+    .loading.show {
+      display: block;
+    }
+    
+    .spinner {
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #667eea;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    .info-box {
+      background: #e3f2fd;
+      border-left: 4px solid #2196f3;
+      padding: 15px;
+      margin-bottom: 20px;
+      border-radius: 4px;
+    }
+    
+    .info-box h3 {
+      margin-top: 0;
+      color: #1976d2;
+    }
+    
+    .info-box p {
+      margin: 5px 0;
+      color: #555;
+      font-size: 14px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <h2>🛍️ Part 2용 쿠팡 업로더</h2>
+    
+    <div class="info-box">
+      <h3>📌 Part 2 안내</h3>
+      <p id="targetDateInfo">• 처리 날짜: 로딩 중...</p>
+      <p>• 쿠팡 파일 업로드 후 자동으로 다음 과정이 실행됩니다:</p>
+      <p>&nbsp;&nbsp;✓ 쿠팡 데이터 처리</p>
+      <p>&nbsp;&nbsp;✓ 품목별 시트 분리</p>
+      <p>&nbsp;&nbsp;✓ 엑셀 파일 생성</p>
+      <p>&nbsp;&nbsp;✓ 이메일 전송</p>
+    </div>
+
+    <div class="upload-area" id="uploadArea">
+      <div class="upload-icon">📁</div>
+      <div class="upload-text">쿠팡 엑셀 파일을 드래그 앤 드롭하거나 클릭하여 선택하세요</div>
+      <div style="color: #999; font-size: 14px;">(.xlsx, .xls 파일만 가능)</div>
+      <input type="file" id="fileInput" class="file-input" accept=".xlsx,.xls">
+    </div>
+
+    <div class="file-info" id="fileInfo">
+      <div class="file-name" id="fileName"></div>
+      <div class="progress-bar" id="progressBar">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+    </div>
+
+    <button class="button" id="uploadButton" style="display: none;" onclick="uploadFile()">
+      Part 2 시작 - 파일 업로드 및 전체 과정 실행
+    </button>
+
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <div style="margin-top: 10px; color: #666;">Part 2를 실행하는 중입니다...</div>
+    </div>
+
+    <div class="message" id="message"></div>
+  </div>
+
+  <script>
+    let selectedFile = null;
+
+    const uploadArea = document.getElementById('uploadArea');
+    const fileInput = document.getElementById('fileInput');
+    const fileInfo = document.getElementById('fileInfo');
+    const fileName = document.getElementById('fileName');
+    const uploadButton = document.getElementById('uploadButton');
+    const progressBar = document.getElementById('progressBar');
+    const progressFill = document.getElementById('progressFill');
+    const loading = document.getElementById('loading');
+    const message = document.getElementById('message');
+
+    // 페이지 로드시 날짜 정보 가져오기
+    window.onload = function() {
+      google.script.run
+        .withSuccessHandler(function(dateInfo) {
+          document.getElementById('targetDateInfo').textContent = `• 처리 날짜: ${dateInfo.dateString}`;
+        })
+        .withFailureHandler(function(error) {
+          document.getElementById('targetDateInfo').textContent = `• 처리 날짜: 오늘`;
+        })
+        .getPart2TargetDate();
+    };
+
+    // 클릭으로 파일 선택
+    uploadArea.addEventListener('click', () => {
+      fileInput.click();
+    });
+
+    // 파일 선택 이벤트
+    fileInput.addEventListener('change', (e) => {
+      handleFile(e.target.files[0]);
+    });
+
+    // 드래그 앤 드롭 이벤트들
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+      document.addEventListener(eventName, preventDefaults, false);
+      uploadArea.addEventListener(eventName, preventDefaults, false);
+    });
+    
+    ['dragenter', 'dragover'].forEach(eventName => {
+      uploadArea.addEventListener(eventName, highlight, false);
+    });
+    
+    ['dragleave', 'drop'].forEach(eventName => {
+      uploadArea.addEventListener(eventName, unhighlight, false);
+    });
+    
+    uploadArea.addEventListener('drop', handleDrop, false);
+    
+    function preventDefaults(e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    
+    function highlight(e) {
+      uploadArea.classList.add('dragover');
+    }
+    
+    function unhighlight(e) {
+      uploadArea.classList.remove('dragover');
+    }
+    
+    function handleDrop(e) {
+      const files = e.dataTransfer.files;
+      if (files.length > 0) {
+        handleFile(files[0]);
+      }
+    }
+
+    function handleFile(file) {
+      if (!file) return;
+
+      // 파일 확장자 확인
+      const validExtensions = ['.xlsx', '.xls'];
+      const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+
+      if (!validExtensions.includes(fileExtension)) {
+        showMessage('엑셀 파일(.xlsx, .xls)만 업로드 가능합니다.', 'error');
+        return;
+      }
+
+      selectedFile = file;
+      fileName.textContent = `📄 ${file.name} (${formatFileSize(file.size)})`;
+      fileInfo.classList.add('show');
+      uploadButton.style.display = 'block';
+      hideMessage();
+    }
+
+    function formatFileSize(bytes) {
+      if (bytes === 0) return '0 Bytes';
+      const k = 1024;
+      const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+    }
+
+    function uploadFile() {
+      if (!selectedFile) {
+        showMessage('파일을 선택해주세요.', 'error');
+        return;
+      }
+
+      uploadButton.disabled = true;
+      progressBar.classList.add('show');
+      loading.classList.add('show');
+
+      // 프로그레스 바 애니메이션
+      let progress = 0;
+      const progressInterval = setInterval(() => {
+        progress += 5;
+        progressFill.style.width = progress + '%';
+        if (progress >= 90) {
+          clearInterval(progressInterval);
+        }
+      }, 200);
+
+      // FileReader로 파일 읽기
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        const fileData = e.target.result.split(',')[1];
+
+        // Google Apps Script 함수 호출 (Part 2 전용)
+        google.script.run
+          .withSuccessHandler(onUploadSuccess)
+          .withFailureHandler(onUploadError)
+          .processPart2CoupangFileAndContinue(fileData, selectedFile.name);
+      };
+
+      reader.readAsDataURL(selectedFile);
+    }
+
+    function onUploadSuccess(result) {
+      progressFill.style.width = '100%';
+      loading.classList.remove('show');
+
+      if (result.success) {
+        showMessage(result.message, 'success');
+        setTimeout(() => {
+          showMessage('✨ 5초 후 창이 자동으로 닫힙니다...', 'info');
+          setTimeout(() => {
+            google.script.host.close();
+          }, 5000);
+        }, 2000);
+      } else {
+        showMessage(`❌ Part 2 실행 실패!\n\n${result.error}`, 'error');
+      }
+
+      uploadButton.disabled = false;
+    }
+
+    function onUploadError(error) {
+      loading.classList.remove('show');
+      progressBar.classList.remove('show');
+      showMessage(`❌ Part 2 실행 오류:\n${error}`, 'error');
+      uploadButton.disabled = false;
+    }
+
+    function showMessage(text, type = 'info') {
+      message.textContent = text;
+      message.className = 'message ' + type + ' show';
+      
+      setTimeout(() => {
+        message.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 100);
+    }
+
+    function hideMessage() {
+      message.className = 'message';
+      message.textContent = '';
+    }
+  </script>
+</body>
+</html>

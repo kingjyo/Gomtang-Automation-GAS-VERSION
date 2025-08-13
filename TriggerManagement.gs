@@ -122,17 +122,15 @@ function executeTriggerCoupangAutomationWithDate() {
     const targetDate = scriptProperties.getProperty('TARGET_DATE');
     const fileName = scriptProperties.getProperty('COUPANG_FILE_NAME') || '업로드된 파일';
     
-    if (!coupangFileId) {
-      throw new Error('저장된 Coupang 파일이 없습니다.');
-    }
-    
     const dateMessage = targetDate ? `${targetDate.substring(0,2)}월 ${targetDate.substring(2,4)}일` : '오늘';
+    const hasCoupangFile = Boolean(coupangFileId);
     
     logUpdate('🚀 날짜 지정 트리거 자동화 시작', { 
       success: true, 
-      coupangFileId,
+      coupangFileId: coupangFileId || '없음',
+      hasCoupangFile,
       targetDate: dateMessage,
-      fileName,
+      fileName: hasCoupangFile ? fileName : '쿠팡 파일 없음',
       time: new Date().toLocaleString('ko-KR') 
     });
     
@@ -142,16 +140,33 @@ function executeTriggerCoupangAutomationWithDate() {
       throw new Error('Part 1 파이프라인 실패: ' + part1Result.error);
     }
     
-    // 2. Coupang 파일에서 데이터 읽기
-    const coupangFile = DriveApp.getFileById(coupangFileId);
-    const blob = coupangFile.getBlob();
-    const base64Data = Utilities.base64Encode(blob.getBytes());
+    let result;
     
-    // 3. 완전 자동화 파이프라인 실행 (Coupang 파일 포함)
-    const result = processCoupangFileAndExecuteRemaining(base64Data, fileName);
+    if (hasCoupangFile) {
+      // 2-A. 쿠팡 파일이 있는 경우: 파일에서 데이터 읽기
+      logUpdate('📄 쿠팡 파일 처리 시작', { fileName, fileId: coupangFileId });
+      
+      const coupangFile = DriveApp.getFileById(coupangFileId);
+      const blob = coupangFile.getBlob();
+      const base64Data = Utilities.base64Encode(blob.getBytes());
+      
+      // 3-A. 완전 자동화 파이프라인 실행 (쿠팡 파일 포함)
+      result = processCoupangFileAndExecuteRemaining(base64Data, fileName);
+      
+    } else {
+      // 2-B. 쿠팡 파일이 없는 경우: Part 2만 실행 (쿠팡 없이)
+      logUpdate('📌 쿠팡 파일 없이 Part 2 실행', { message: '쿠팡 주문 없음' });
+      
+      // 3-B. Part 2 실행 (품목분리, 엑셀생성, 이메일전송)
+      result = executePart2WithoutCoupang(targetDate);
+    }
     
     if (result.success) {
-      logUpdate(`🎉 ${dateMessage} 데이터 트리거 자동화 완료! 트리거 정리 중...`, result);
+      const successMessage = hasCoupangFile ? 
+        `🎉 ${dateMessage} 데이터 트리거 자동화 완료! (쿠팡 포함) 트리거 정리 중...` :
+        `🎉 ${dateMessage} 데이터 트리거 자동화 완료! (쿠팡 없음) 트리거 정리 중...`;
+      
+      logUpdate(successMessage, result);
       
       // 성공시 트리거 자동 삭제
       deleteTriggerAndCleanupWithDate();

@@ -320,7 +320,7 @@
 
 <body>
   <div class="container">
-    <h2>⏰ 트리거용 쿠팡 파일 업로더 (날짜 지정 가능)</h2>
+    <h2>⏰ 트리거용 자동화 설정 (쿠팡 파일 선택적)</h2>
 
     <div class="test-mode-indicator" id="testModeIndicator">
       🧪 테스트 모드: 이전 날짜로 실행됩니다
@@ -330,9 +330,14 @@
       <div class="upload-icon">📁</div>
       <div class="upload-text">쿠팡 엑셀 파일을 드래그 앤 드롭하거나 클릭하여 선택하세요</div>
       <div style="color: #999; font-size: 14px;">(.xlsx, .xls 파일만 가능)</div>
-      <div style="color: #666; font-size: 13px; margin-top: 10px;">📌 이 파일은 자동 트리거 실행시 사용됩니다</div>
+      <div style="color: #ff6b6b; font-size: 14px; margin-top: 10px; font-weight: bold;">⚠️ 쿠팡 파일은 선택사항입니다</div>
+      <div style="color: #666; font-size: 13px; margin-top: 5px;">📌 파일 없이도 트리거 설정 가능 (쿠팡 주문이 없는 경우)</div>
       <input type="file" id="fileInput" class="file-input" accept=".xlsx,.xls">
     </div>
+    
+    <button class="button" id="skipCoupangButton" style="margin-top: 15px; background: linear-gradient(135deg, #ff9a56 0%, #ff6b6b 100%);" onclick="skipCoupangFile()">
+      🚫 쿠팡 파일 없이 트리거 설정
+    </button>
 
     <div class="file-info" id="fileInfo">
       <div class="file-name" id="fileName"></div>
@@ -571,6 +576,25 @@
       uploadButton.disabled = false;
     }
 
+    function skipCoupangFile() {
+      debugLog('skipCoupangFile 함수 시작 - 쿠팡 파일 없이 진행');
+      
+      // 파일 없이 트리거 설정 UI 표시
+      uploadedFileId = null; // 파일 ID를 null로 설정
+      selectedFile = { name: '(쿠팡 파일 없음)' };
+      
+      document.getElementById('uploadedFileName').textContent = '쿠팡 파일 없음';
+      document.getElementById('uploadedFileId').textContent = '파일 없이 진행';
+      
+      showMessage(`📌 쿠팡 파일 없이 트리거를 설정합니다.`, 'info');
+      triggerSetup.classList.add('show');
+      
+      // 업로드 영역 숨기기
+      uploadArea.style.display = 'none';
+      document.getElementById('skipCoupangButton').style.display = 'none';
+      uploadButton.style.display = 'none';
+    }
+    
     function setupTrigger() {
       debugLog('setupTrigger 함수 시작');
       
@@ -580,10 +604,7 @@
         return;
       }
 
-      if (!uploadedFileId) {
-        showMessage('먼저 파일을 업로드해주세요.', 'error');
-        return;
-      }
+      // 쿠팡 파일이 없어도 진행 가능 (uploadedFileId가 null일 수 있음)
 
       const hour = parseInt(document.getElementById('triggerHour').value);
       const minute = parseInt(document.getElementById('triggerMinute').value);
@@ -621,12 +642,16 @@
       // 로딩 메시지 표시
       const timeStr = `${hour}:${minute.toString().padStart(2, '0')}`;
       const dateStr = targetDate ? ` (${targetDate.substring(0,2)}월 ${targetDate.substring(2,4)}일 데이터로)` : ' (오늘 데이터로)';
+      const fileStr = uploadedFileId ? ` (파일: ${selectedFile.name})` : ' (쿠팡 파일 없음)';
       
-      showMessage(`⏳ 트리거 설정 중입니다...\n${timeStr}에 실행되도록 설정하고 있습니다${dateStr}`, 'info');
+      showMessage(`⏳ 트리거 설정 중입니다...\n${timeStr}에 실행되도록 설정하고 있습니다${dateStr}${fileStr}`, 'info');
       
-      debugLog(`트리거 설정 요청: ${hour}:${minute}, 날짜: ${targetDate}, 파일 ID: ${uploadedFileId}`);
+      debugLog(`트리거 설정 요청: ${hour}:${minute}, 날짜: ${targetDate}, 파일 ID: ${uploadedFileId || '없음'}`);
       
-      // 트리거 설정
+      // 트리거 설정 (파일 ID가 null일 수 있음)
+      const fileIdToSend = uploadedFileId || '';
+      const fileNameToSend = uploadedFileId ? selectedFile.name : '';
+      
       try {
         google.script.run
           .withSuccessHandler(function(result) {
@@ -639,11 +664,11 @@
               const successMessage = `🎉 트리거 설정 완료!\n\n` +
                 `⏰ 실행 시간: ${timeStr}\n` +
                 `📅 처리 날짜: ${targetDate ? `${targetDate.substring(0,2)}월 ${targetDate.substring(2,4)}일` : '오늘'}\n` +
-                `📄 파일: ${selectedFile.name}\n` +
+                `📄 쿠팡 파일: ${uploadedFileId ? selectedFile.name : '없음 (쿠팡 주문 없음)'}\n` +
                 `🔧 트리거 ID: ${result.triggerId || 'N/A'}\n\n` +
                 `✅ 설정된 시간에 자동 실행됩니다\n` +
-                `🔄 실패시 30분마다 최대 3회 재시도\n` +
-                `🧹 성공시 트리거와 파일 자동 정리`;
+                `${uploadedFileId ? '🔄 실패시 30분마다 최대 3회 재시도' : '📌 쿠팡 데이터 없이 진행'}\n` +
+                `🧹 성공시 트리거${uploadedFileId ? '와 파일' : ''} 자동 정리`;
               
               showMessage(successMessage, 'success');
               
@@ -667,7 +692,7 @@
             
             showMessage(`❌ 트리거 설정 오류:\n${error}`, 'error');
           })
-          .createTodayAutoTriggerWithDate(uploadedFileId, selectedFile.name, hour, minute, targetDate);
+          .createTodayAutoTriggerWithDate(fileIdToSend, fileNameToSend, hour, minute, targetDate);
           
       } catch (error) {
         debugLog('트리거 설정 예외: ' + error);
