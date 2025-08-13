@@ -53,10 +53,13 @@ const CoupangProcessor = {
   },
   
   /**
-   * 쿠팡 데이터를 수기송장에 추가
+   * 쿠팡 데이터를 수기송장에 추가 (디버깅 강화)
    */
   addCoupangDataToManualInvoice: function(coupangData) {
     try {
+      console.log('=== 쿠팡 데이터 수기송장 추가 시작 ===');
+      console.log(`총 데이터 행 수: ${coupangData.length}`);
+      
       const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
       
       // 날짜 추출
@@ -85,6 +88,8 @@ const CoupangProcessor = {
         throw new Error('수기송장 시트를 찾을 수 없습니다: ' + manualSheetName + ' 또는 ' + manualSheetNameOld);
       }
       
+      console.log(`✅ 수기송장 시트 발견: ${manualSheet.getName()}`);
+      
       // 쿠팡 데이터 헤더와 열 매핑
       const coupangHeaders = coupangData[0];
       const coupangRows = coupangData.slice(1);
@@ -94,20 +99,50 @@ const CoupangProcessor = {
       const manualHeaders = manualSheet.getRange(1, 1, 1, manualSheet.getLastColumn()).getValues()[0];
       const manualMapping = this.getManualColumnMapping(manualHeaders);
       
+      console.log(`처리할 쿠팡 데이터 행 수: ${coupangRows.length}`);
+      
       // 변환된 데이터 생성
       const newRows = [];
-      for (const row of coupangRows) {
-        if (!row[coupangMapping.productName]) continue;
+      let processedCount = 0;
+      let skippedCount = 0;
+      
+      for (let i = 0; i < coupangRows.length; i++) {
+        const row = coupangRows[i];
+        console.log(`\n--- 행 ${i + 1} 처리 중 ---`);
+        
+        const productName = row[coupangMapping.productName];
+        const quantity = row[coupangMapping.quantity];
+        
+        console.log(`상품명: "${productName}"`);
+        console.log(`수량: "${quantity}"`);
+        
+        if (!productName) {
+          console.log(`❌ 건너뛰기: 상품명 없음`);
+          skippedCount++;
+          continue;
+        }
         
         const convertedRow = this.convertCoupangRow(row, coupangMapping, manualHeaders.length);
         if (convertedRow) {
           newRows.push(convertedRow);
+          processedCount++;
+          console.log(`✅ 행 처리 완료`);
+        } else {
+          console.log(`❌ 건너뛰기: 변환 실패`);
+          skippedCount++;
         }
       }
+      
+      console.log(`\n=== 처리 결과 ===`);
+      console.log(`성공: ${processedCount}개`);
+      console.log(`건너뛰기: ${skippedCount}개`);
+      console.log(`추가할 행: ${newRows.length}개`);
       
       // 수기송장에 데이터 추가
       if (newRows.length > 0) {
         const lastRow = manualSheet.getLastRow();
+        console.log(`수기송장 ${lastRow + 1}번째 행부터 ${newRows.length}개 행 추가`);
+        
         manualSheet.getRange(lastRow + 1, 1, newRows.length, newRows[0].length).setValues(newRows);
         
         // 검산결과 시트 업데이트
@@ -118,10 +153,13 @@ const CoupangProcessor = {
       return {
         success: true,
         rowsAdded: newRows.length,
-        message: `쿠팡 데이터 ${newRows.length}행이 추가되었습니다.`
+        processedCount: processedCount,
+        skippedCount: skippedCount,
+        message: `쿠팡 데이터 ${newRows.length}행이 추가되었습니다. (처리: ${processedCount}, 건너뛰기: ${skippedCount})`
       };
       
     } catch (error) {
+      console.error('addCoupangDataToManualInvoice 실패:', error);
       return {
         success: false,
         error: error.toString()
@@ -130,58 +168,97 @@ const CoupangProcessor = {
   },
   
   /**
-   * 쿠팡 열 매핑
+   * 쿠팡 열 매핑 (개선된 버전)
    */
   getCoupangColumnMapping: function(headers) {
     const mapping = {};
     
+    console.log('=== 쿠팡 헤더 분석 시작 ===');
+    console.log('전체 헤더:', headers);
+    
     // 헤더로 찾기
     headers.forEach((header, index) => {
       const cleanHeader = String(header).trim();
+      console.log(`Index ${index} (${String.fromCharCode(65 + index)}열): "${cleanHeader}"`);
       
-      // P열: 상품명
-      if (index === 15 || cleanHeader.includes('제동한우') || cleanHeader.includes('상품명')) {
-        mapping.productName = index;
+      // M열(12) 또는 P열(15): 상품명 - 더 포괄적인 매칭
+      if (index === 12 || index === 15 || 
+          cleanHeader.includes('노출상품명') || 
+          cleanHeader.includes('최초등록상품명') ||
+          cleanHeader.includes('상품명') ||
+          cleanHeader.includes('제동한우')) {
+        // 우선순위: P열 > M열 > 기타
+        if (!mapping.productName || index === 15) {
+          mapping.productName = index;
+          console.log(`✅ 상품명 컬럼 설정: ${index}번째 (${String.fromCharCode(65 + index)}열) - "${cleanHeader}"`);
+        }
       }
-      // W열: 구매수(수량)
-      if (index === 22 || cleanHeader === '구매수' || cleanHeader === '수량') {
+      
+      // W열(22): 구매수(수량) - 더 포괄적인 매칭
+      if (index === 22 || 
+          cleanHeader === '구매수' || 
+          cleanHeader === '수량' ||
+          cleanHeader.includes('구매수') ||
+          cleanHeader.includes('수량')) {
         mapping.quantity = index;
+        console.log(`✅ 수량 컬럼 설정: ${index}번째 (${String.fromCharCode(65 + index)}열) - "${cleanHeader}"`);
       }
-      // Y열: 구매자
+      
+      // Y열(24): 구매자
       if (index === 24 || cleanHeader === '구매자') {
         mapping.buyer = index;
+        console.log(`✅ 구매자 컬럼 설정: ${index}번째 (${String.fromCharCode(65 + index)}열)`);
       }
-      // Z열: 구매자전화번호
+      
+      // Z열(25): 구매자전화번호
       if (index === 25 || cleanHeader === '구매자전화번호') {
         mapping.buyerPhone = index;
+        console.log(`✅ 구매자전화 컬럼 설정: ${index}번째 (${String.fromCharCode(65 + index)}열)`);
       }
-      // AA열: 수취인이름
+      
+      // AA열(26): 수취인이름
       if (index === 26 || cleanHeader === '수취인이름' || cleanHeader === '수취인') {
         mapping.receiverName = index;
+        console.log(`✅ 수취인 컬럼 설정: ${index}번째 (${String.fromCharCode(65 + index)}열)`);
       }
-      // AB열: 수취인전화번호
+      
+      // AB열(27): 수취인전화번호
       if (index === 27 || cleanHeader === '수취인전화번호') {
         mapping.receiverPhone = index;
+        console.log(`✅ 수취인전화 컬럼 설정: ${index}번째 (${String.fromCharCode(65 + index)}열)`);
       }
-      // AC열: 우편번호
+      
+      // AC열(28): 우편번호
       if (index === 28 || cleanHeader === '우편번호') {
         mapping.postalCode = index;
+        console.log(`✅ 우편번호 컬럼 설정: ${index}번째 (${String.fromCharCode(65 + index)}열)`);
       }
-      // AD열: 수취인 주소
-      if (index === 29 || cleanHeader.includes('수취인') && cleanHeader.includes('주소')) {
+      
+      // AD열(29): 수취인 주소
+      if (index === 29 || (cleanHeader.includes('수취인') && cleanHeader.includes('주소'))) {
         mapping.address = index;
+        console.log(`✅ 주소 컬럼 설정: ${index}번째 (${String.fromCharCode(65 + index)}열)`);
       }
     });
     
     // 인덱스로 보정 (헤더를 못 찾았을 경우)
-    if (!mapping.productName) mapping.productName = 15; // P열
-    if (!mapping.quantity) mapping.quantity = 22; // W열
+    if (!mapping.productName) {
+      mapping.productName = 15; // P열 기본값
+      console.log(`⚠️ 상품명 컬럼 기본값 사용: P열(15)`);
+    }
+    if (!mapping.quantity) {
+      mapping.quantity = 22; // W열 기본값
+      console.log(`⚠️ 수량 컬럼 기본값 사용: W열(22)`);
+    }
     if (!mapping.buyer) mapping.buyer = 24; // Y열
     if (!mapping.buyerPhone) mapping.buyerPhone = 25; // Z열
     if (!mapping.receiverName) mapping.receiverName = 26; // AA열
     if (!mapping.receiverPhone) mapping.receiverPhone = 27; // AB열
     if (!mapping.postalCode) mapping.postalCode = 28; // AC열
     if (!mapping.address) mapping.address = 29; // AD열
+    
+    console.log('=== 최종 컬럼 매핑 ===');
+    console.log(JSON.stringify(mapping, null, 2));
     
     return mapping;
   },
@@ -219,27 +296,52 @@ const CoupangProcessor = {
   },
   
   /**
-   * 쿠팡 행 변환
+   * 쿠팡 행 변환 (개선된 버전)
    */
   convertCoupangRow: function(coupangRow, coupangMapping, numColumns) {
     const productNameRaw = String(coupangRow[coupangMapping.productName] || '');
+    const quantityRaw = coupangRow[coupangMapping.quantity];
     
-    // 상품명 변환
+    console.log(`=== 상품 변환 시도 ===`);
+    console.log(`원본 상품명: "${productNameRaw}"`);
+    console.log(`원본 수량: "${quantityRaw}"`);
+    
+    // 상품명 변환 (더 유연한 매칭)
     let convertedProductName = '';
-    if (productNameRaw.includes('사골고기곰탕') && productNameRaw.includes('5개')) {
+    
+    // 패턴 1: 사골고기곰탕 5개입
+    if ((productNameRaw.includes('사골고기곰탕') || productNameRaw.includes('사골고기 곰탕')) && 
+        (productNameRaw.includes('5개') || productNameRaw.includes('5팩'))) {
       convertedProductName = '제동 사골고기곰탕(5팩 1세트)';
-    } else if (productNameRaw.includes('사골곰탕') && productNameRaw.includes('5개')) {
-      convertedProductName = '제동 사골곰탕(5팩 1세트)';
-    } else if (productNameRaw.includes('사골곰탕') && productNameRaw.includes('10개')) {
-      convertedProductName = '제동 사골곰탕(10팩 1세트)';
-    } else if (productNameRaw.includes('사골곰탕') && productNameRaw.includes('20개')) {
+    }
+    // 패턴 2: 사골곰탕 20개입
+    else if (productNameRaw.includes('사골곰탕') && !productNameRaw.includes('사골고기') &&
+             (productNameRaw.includes('20개') || productNameRaw.includes('20팩'))) {
       convertedProductName = '제동 사골곰탕(20팩 1세트)';
-    } else if (productNameRaw.includes('육포') && productNameRaw.includes('5개')) {
+    }
+    // 패턴 3: 사골곰탕 10개입
+    else if (productNameRaw.includes('사골곰탕') && !productNameRaw.includes('사골고기') &&
+             (productNameRaw.includes('10개') || productNameRaw.includes('10팩'))) {
+      convertedProductName = '제동 사골곰탕(10팩 1세트)';
+    }
+    // 패턴 4: 사골곰탕 5개입 (기본)
+    else if (productNameRaw.includes('사골곰탕') && !productNameRaw.includes('사골고기') &&
+             (productNameRaw.includes('5개') || productNameRaw.includes('5팩') || 
+              (!productNameRaw.includes('10개') && !productNameRaw.includes('20개')))) {
+      convertedProductName = '제동 사골곰탕(5팩 1세트)';
+    }
+    // 패턴 5: 육포 5개입
+    else if (productNameRaw.includes('육포') && 
+             (productNameRaw.includes('5개') || productNameRaw.includes('5팩'))) {
       convertedProductName = '제동한우 육포(5팩 1세트)';
-    } else {
+    }
+    else {
       // 변환할 수 없는 상품은 건너뛰기
+      console.log(`❌ 변환 실패: "${productNameRaw}" - 알 수 없는 상품 형식`);
       return null;
     }
+    
+    console.log(`✅ 변환 성공: "${productNameRaw}" → "${convertedProductName}"`);
     
     // 새 행 생성
     const newRow = new Array(numColumns).fill('');
@@ -257,7 +359,7 @@ const CoupangProcessor = {
     newRow[13] = convertedProductName; // N: 품목명
     newRow[18] = '쿠팡'; // S: 메모1 (쿠팡 마킹)
     
-    console.log('Coupang row converted with 쿠팡 marker:', { productName: convertedProductName, quantity: newRow[12] });
+    console.log(`✅ 행 변환 완료: 상품="${convertedProductName}", 수량=${newRow[12]}, 받는분="${newRow[6]}"`);
     
     return newRow;
   },
@@ -582,37 +684,50 @@ const CoupangProcessor = {
 };
 
 /**
- * 현재 작업 중인 날짜 가져오기 (스프레드시트의 시트명에서 추출)
+ * 현재 작업 중인 날짜 가져오기 (저장된 날짜 우선, 없으면 시트명에서 추출)
  */
 function getCurrentWorkingDate() {
   try {
+    // 1. 저장된 작업 날짜 확인 (통합 워크플로우에서 설정)
+    const savedDate = PropertiesService.getScriptProperties().getProperty('CURRENT_WORKING_DATE');
+    if (savedDate) {
+      console.log(`저장된 작업 날짜 사용: ${savedDate}`);
+      return savedDate;
+    }
+    
     const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
     const sheets = spreadsheet.getSheets();
     
-    // 수기송장 시트에서 날짜 추출
+    // 2. 수기송장 시트에서 날짜 추출
     for (const sheet of sheets) {
       const name = sheet.getName();
       if (name.includes('_간편식_수기송장') && !name.startsWith('TEST_')) {
         const datePart = name.split('_')[0];
         if (datePart.length === 8 && /^\d{8}$/.test(datePart)) {
-          return datePart.substring(4); // YYYYMMDD에서 MMDD 추출
+          const mmdd = datePart.substring(4); // YYYYMMDD에서 MMDD 추출
+          console.log(`수기송장 시트에서 날짜 추출: ${mmdd}`);
+          return mmdd;
         }
       }
     }
     
-    // 검산결과 시트에서 날짜 추출
+    // 3. 검산결과 시트에서 날짜 추출
     for (const sheet of sheets) {
       const name = sheet.getName();
       if (name.includes('_검산결과') && !name.startsWith('TEST_')) {
         const datePart = name.split('_')[0];
         if (datePart.length === 8 && /^\d{8}$/.test(datePart)) {
-          return datePart.substring(4); // YYYYMMDD에서 MMDD 추출
+          const mmdd = datePart.substring(4); // YYYYMMDD에서 MMDD 추출
+          console.log(`검산결과 시트에서 날짜 추출: ${mmdd}`);
+          return mmdd;
         }
       }
     }
     
-    // 기본값: 오늘 날짜
-    return getTodayShortDate();
+    // 4. 기본값: 오늘 날짜
+    const todayDate = getTodayShortDate();
+    console.log(`기본값으로 오늘 날짜 사용: ${todayDate}`);
+    return todayDate;
     
   } catch (error) {
     console.error('getCurrentWorkingDate 오류:', error);
@@ -643,10 +758,13 @@ function processCoupangFile(fileData, fileName) {
 
 /**
  * 쿠팡 파일 처리 후 자동으로 나머지 과정 실행 (통합 워크플로우용)
+ * @param {string} fileData - Base64 인코딩된 파일 데이터
+ * @param {string} fileName - 파일명
+ * @param {string} targetDate - MMDD 형식의 대상 날짜 (선택적)
  */
-function processCoupangFileAndExecuteRemaining(fileData, fileName) {
+function processCoupangFileAndExecuteRemaining(fileData, fileName, targetDate) {
   console.log('=== Function Start: processCoupangFileAndExecuteRemaining ===');
-  console.log('Parameters:', { fileName });
+  console.log('Parameters:', { fileName, targetDate });
   
   try {
     // 1. 쿠팡 파일 처리
@@ -658,9 +776,10 @@ function processCoupangFileAndExecuteRemaining(fileData, fileName) {
       return { success: false, error: '쿠팡 파일 처리 실패: ' + coupangResult.error };
     }
     
-    // 2. 품목별 분할 (필수) - 현재 작업 중인 날짜 사용
-    const currentDate = getCurrentWorkingDate();
-    const splitResult = ProductSplitter.splitByProduct(currentDate);
+    // 2. 품목별 분할 (필수) - 지정된 날짜 또는 현재 작업 중인 날짜 사용
+    const workingDate = targetDate || getCurrentWorkingDate();
+    console.log(`품목별 분할에 사용할 날짜: ${workingDate}`);
+    const splitResult = ProductSpliter.splitByProduct(workingDate);
     logUpdate('📊 품목별 분할', splitResult);
     
     if (!splitResult.success) {
@@ -669,7 +788,7 @@ function processCoupangFileAndExecuteRemaining(fileData, fileName) {
     }
     
     // 3. 품목별 시트 생성 및 엑셀 다운로드 (동일한 날짜 사용)
-    const downloadResult = ProductDownloader.downloadProductSheets(currentDate);
+    const downloadResult = ProductDownloader.downloadProductSheets(workingDate);
     logUpdate('📥 품목별 엑셀 생성', downloadResult);
     
     if (!downloadResult.success) {
@@ -677,8 +796,8 @@ function processCoupangFileAndExecuteRemaining(fileData, fileName) {
       return { success: false, error: '엑셀 생성 실패: ' + downloadResult.error };
     }
     
-    // 4. 자동 이메일 전송
-    const emailResult = sendEmailWithProductSheets();
+    // 4. 자동 이메일 전송 (동일한 날짜 사용)
+    const emailResult = sendEmailWithProductSheets(workingDate);
     logUpdate('📧 자동 이메일 전송', emailResult);
     
     if (emailResult.success) {
@@ -694,12 +813,20 @@ function processCoupangFileAndExecuteRemaining(fileData, fileName) {
         time: new Date().toLocaleString('ko-KR')
       });
       
+      // 작업 완료 후 임시 저장된 날짜 정리
+      PropertiesService.getScriptProperties().deleteProperty('CURRENT_WORKING_DATE');
+      console.log('임시 저장된 작업 날짜 정리 완료');
+      
       console.log('=== Function End: processCoupangFileAndExecuteRemaining SUCCESS ===');
       return { 
         success: true, 
         message: '모든 과정이 완료되었습니다. 출고 요청 이메일이 발송되었습니다.' 
       };
     } else {
+      // 실패 시에도 임시 저장된 날짜 정리
+      PropertiesService.getScriptProperties().deleteProperty('CURRENT_WORKING_DATE');
+      console.log('실패 시 임시 저장된 작업 날짜 정리 완료');
+      
       logUpdate('⚠️ 이메일 전송 실패하지만 데이터 처리는 완료', emailResult);
       return { 
         success: false, 
@@ -710,8 +837,63 @@ function processCoupangFileAndExecuteRemaining(fileData, fileName) {
   } catch (error) {
     console.error('ERROR in processCoupangFileAndExecuteRemaining:', error.toString());
     console.error('Error stack:', error.stack);
+    
+    // 오류 시에도 임시 저장된 날짜 정리
+    PropertiesService.getScriptProperties().deleteProperty('CURRENT_WORKING_DATE');
+    console.log('오류 시 임시 저장된 작업 날짜 정리 완료');
+    
     logUpdate('❌ 통합 워크플로우 오류', { success: false, error: error.toString() });
     console.log('=== Function End: processCoupangFileAndExecuteRemaining FAILED ===');
     return { success: false, error: error.toString() };
   }
+}
+
+/**
+ * 디버깅용 함수 - 쿠팡 파일의 헤더와 데이터 구조 확인
+ */
+function debugCoupangFile() {
+  console.log('=== 쿠팡 파일 디버깅 시작 ===');
+  
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const sheets = spreadsheet.getSheets();
+  
+  // 쿠팡 시트 찾기
+  let coupangSheet = null;
+  for (const sheet of sheets) {
+    const name = sheet.getName();
+    if (name.includes('쿠팡') || name.includes('Delivery')) {
+      coupangSheet = sheet;
+      console.log(`✅ 쿠팡 시트 발견: "${name}"`);
+      break;
+    }
+  }
+  
+  if (!coupangSheet) {
+    console.log('❌ 쿠팡 시트를 찾을 수 없습니다.');
+    return;
+  }
+  
+  const data = coupangSheet.getDataRange().getValues();
+  const headers = data[0];
+  const firstDataRow = data[1];
+  
+  console.log('\n=== 헤더 정보 ===');
+  headers.forEach((header, index) => {
+    console.log(`${String.fromCharCode(65 + index)}열 (${index}): "${header}"`);
+  });
+  
+  console.log('\n=== 첫 번째 데이터 행 ===');
+  if (firstDataRow) {
+    console.log('M열 (12):', firstDataRow[12]);
+    console.log('P열 (15):', firstDataRow[15]);
+    console.log('W열 (22):', firstDataRow[22]);
+    console.log('Y열 (24):', firstDataRow[24]);
+    console.log('Z열 (25):', firstDataRow[25]);
+    console.log('AA열 (26):', firstDataRow[26]);
+    console.log('AB열 (27):', firstDataRow[27]);
+  }
+  
+  console.log('\n=== 총 데이터 행 수 ===');
+  console.log(`헤더 포함 총 ${data.length}행`);
+  console.log(`데이터 행: ${data.length - 1}행`);
 }

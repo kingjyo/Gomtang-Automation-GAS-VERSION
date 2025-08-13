@@ -19,6 +19,23 @@ runVerification()      // Cross-validate data consistency
 splitByProduct()       // Generate product-specific sheets
 ```
 
+### Advanced Automation Workflows
+```javascript
+// Recommended workflow (fully integrated)
+executeSeamlessWorkflow()          // Part 1 → Auto-open Coupang → Part 2 → Email
+processCoupangFileAndExecuteRemaining() // Process Coupang + remaining pipeline
+
+// Semi-automation (manual Coupang step)
+semiAutomationPipeline()           // Run until verification, email reminder
+executePart1Pipeline()             // Cybersky → EDI → verification
+executePart2Pipeline()             // Post-Coupang: split → Excel → email
+
+// Traditional step-by-step
+executePart1Pipeline()             // Data collection and verification
+// [Manual Coupang upload via openCoupangUploader()]
+executePart2Pipeline()             // Final processing and email
+```
+
 ### UI Dialog Functions  
 ```javascript
 // Main interface dialogs (accessed via menu)
@@ -49,6 +66,13 @@ clearTemplates()         // Reset template sheets
 setupTriggers()          // Set up daily 2 PM automation
 initializeConfig()       // Load settings from PropertiesService
 createEmailSettingsSheet() // Create email configuration sheet
+
+// Advanced Trigger Management (TriggerManagement.gs)
+createTodayAutoTrigger(fileId, fileName, hour, minute)  // Create single-use trigger
+executeTriggerCoupangAutomation()    // Trigger execution function
+deleteTriggerAndCleanup()            // Clean up after trigger completion
+scheduleRetryTrigger()               // Schedule 30-min retry on failure
+retryTriggerAutomation()             // Retry trigger function (max 3 attempts)
 ```
 
 ## Architecture
@@ -104,6 +128,11 @@ Main.gs (Central Controller & UI Menu - onOpen() creates menu)
 3. **Quantity Logic**: When A/B sheets match by order number, subtract 1 from A-sheet quantity
 4. **Zero Row Filtering**: Remove processed rows where ORDERCNT ≤ 0
 5. **MEM_ID Handling**: If MEM_ID ≠ 'KAL_CK_MMC', move ORDER_IDX → GROUP_IDX
+
+### Workflow Dependencies
+- **ProductSpliter** (not ProductSplitter): Object name matches filename without double 't'
+- **Global Functions**: Helper functions (`getTodayDate()`, `convertToFullDate()`, `initializeConfig()`) are defined in Main.gs and shared across all files
+- **Email Configuration**: Requires '이메일_설정' sheet with priority-based recipient management
 
 ### Sheet Structure & Naming Convention
 - **A시트**: `YYYYMMDD_간편식_싸이버스카이` (Cybersky order data)
@@ -188,10 +217,24 @@ The system handles various product name formats through `DataProcessor.convertPr
 - Used for consistent display in C-Sheet and verification calculations
 
 ## Automation & Triggers
-- **Daily Schedule**: 2 PM via `setupTriggers()` → calls `dailyUpdate()`
-- **EDI Time Window**: Additional EDI check if current time is 13:00-15:30  
-- **Logging**: All automation results logged to "업데이트_로그" sheet (keeps last 100 entries)
-- **Manual Override**: All automation functions can be called manually via menu
+
+### Trigger Configuration Options
+```javascript
+setupTriggers()              // Full automation: daily 2 PM execution
+setupSemiAutomationTrigger() // Semi-auto: daily 1:30 PM until verification
+manualCompleteAutomation()   // Manual full pipeline with date selection
+```
+
+### Automation Modes
+1. **Full Automation** (2 PM daily): Complete pipeline including Coupang data handling
+2. **Semi-Automation** (1:30 PM daily): Stops at verification, emails reminder for Coupang upload
+3. **Seamless Workflow**: Interactive execution with automatic Coupang uploader opening
+
+### Logging & Monitoring
+- All automation results logged to "업데이트_로그" sheet (keeps last 100 entries)
+- Email alerts for verification failures via `sendVerificationFailureAlert()`
+- Coupang upload reminders via `sendCoupangUploadReminder()`
+- Manual override available for all automation functions via menu
 
 ## UI Dialog Architecture
 The system uses paired `.gs` processor files with corresponding HTML dialog files:
@@ -208,4 +251,16 @@ The system uses paired `.gs` processor files with corresponding HTML dialog file
 HTML dialogs use `google.script.run` to call corresponding processor functions and return results via success/error callbacks.
 
 ## Development Guidelines
+
+### Code Maintenance
+- **Function Naming**: Use consistent object names matching filenames (e.g., `ProductSpliter.splitByProduct()`)
+- **Error Handling**: All functions must return `{ success: boolean, data/error: any }` format
+- **Logging Pattern**: Use `console.log('=== Function Start/End: functionName ===')` for debugging
+- **Test Isolation**: Prefix all test sheets with `TEST_` to avoid production data conflicts
+
+### Common Issues to Avoid
+- **Duplicate Functions**: Remove duplicate function definitions (common in Main.gs after merges)
+- **Object Name Mismatches**: Ensure object names match their filename (ProductSpliter vs ProductSplitter)
+- **Missing Dependencies**: Global helper functions in Main.gs are shared across all files
+
 **After completing tasks, always report the modified file names only (e.g., "Modified files: Main, ProductDownloader")**

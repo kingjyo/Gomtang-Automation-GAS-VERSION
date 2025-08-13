@@ -828,6 +828,10 @@ function executeSeamlessPart1WithDate(targetDate) {
     // 설정 초기화
     initializeConfig();
     
+    // 현재 작업 중인 날짜를 임시 저장 (CoupangProcessor에서 사용)
+    PropertiesService.getScriptProperties().setProperty('CURRENT_WORKING_DATE', targetDate);
+    console.log(`현재 작업 날짜 저장: ${targetDate}`);
+    
     // 1. 싸이버스카이 데이터 업데이트 (날짜 지정)
     const cyberskyResult = CyberskyData.updateCyberskyDataForDate(targetDate);
     logUpdate(`1️⃣ 싸이버스카이 데이터 업데이트 (${targetDate})`, cyberskyResult);

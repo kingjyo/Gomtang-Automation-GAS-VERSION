@@ -148,21 +148,21 @@
     
     <div class="info-box">
       <h3>📌 설정 안내</h3>
-      <p>• 소스 스프레드시트 ID: 싸이버스카이 데이터가 있는 스프레드시트의 ID</p>
-      <p>• 저장 폴더 ID: 처리된 파일들을 저장할 Google Drive 폴더의 ID</p>
-      <p>• ID는 URL에서 확인할 수 있습니다.</p>
+      <p>• 소스 스프레드시트: 싸이버스카이 데이터가 있는 스프레드시트 (URL 또는 ID)</p>
+      <p>• 저장 폴더: 처리된 파일들을 저장할 Google Drive 폴더 (URL 또는 ID)</p>
+      <p>• 💡 전체 URL을 붙여넣으면 자동으로 ID를 추출합니다.</p>
     </div>
     
     <div class="form-group">
       <label for="sourceSpreadsheetId">소스 스프레드시트 ID</label>
-      <input type="text" id="sourceSpreadsheetId" placeholder="예: 1ABC123def456...">
-      <div class="help-text">싸이버스카이 데이터가 업데이트되는 스프레드시트 ID</div>
+      <input type="text" id="sourceSpreadsheetId" placeholder="https://docs.google.com/spreadsheets/d/... 또는 ID만">
+      <div class="help-text">전체 URL 또는 스프레드시트 ID만 입력 가능 (자동 인식)</div>
     </div>
     
     <div class="form-group">
       <label for="folderId">저장 폴더 ID</label>
-      <input type="text" id="folderId" placeholder="예: 0B123ABC456def...">
-      <div class="help-text">처리된 파일들을 저장할 Google Drive 폴더 ID</div>
+      <input type="text" id="folderId" placeholder="https://drive.google.com/drive/folders/... 또는 ID만">
+      <div class="help-text">전체 URL 또는 폴더 ID만 입력 가능 (자동 인식)</div>
     </div>
     
     <div class="form-group">
@@ -173,6 +173,24 @@
     <div class="form-group">
       <label for="senderAddress">발송지 주소</label>
       <input type="text" id="senderAddress" value="서울 강서구 오정로 602">
+    </div>
+    
+    <div class="form-group">
+      <label for="emailSenderName">이메일 발신자 이름</label>
+      <input type="text" id="emailSenderName" placeholder="예: 김영준">
+      <div class="help-text">이메일 본문에 표시될 이름</div>
+    </div>
+    
+    <div class="form-group">
+      <label for="emailSenderTitle">이메일 발신자 직급/소속</label>
+      <input type="text" id="emailSenderTitle" placeholder="예: 한국공항 사원">
+      <div class="help-text">이메일 본문에 표시될 직급이나 소속</div>
+    </div>
+    
+    <div class="form-group">
+      <label for="emailSenderSignature">이메일 서명</label>
+      <input type="text" id="emailSenderSignature" placeholder="예: 김영준">
+      <div class="help-text">이메일 마지막 서명 부분 (예: "김영준 드림"의 "김영준")</div>
     </div>
     
     <div class="loading" id="loading">
@@ -201,6 +219,9 @@
             document.getElementById('folderId').value = settings.folderId || '';
             document.getElementById('senderPostal').value = settings.senderPostal || '7505';
             document.getElementById('senderAddress').value = settings.senderAddress || '서울 강서구 오정로 602';
+            document.getElementById('emailSenderName').value = settings.emailSenderName || '';
+            document.getElementById('emailSenderTitle').value = settings.emailSenderTitle || '';
+            document.getElementById('emailSenderSignature').value = settings.emailSenderSignature || '';
           }
         })
         .withFailureHandler(function(error) {
@@ -214,7 +235,10 @@
         sourceSpreadsheetId: document.getElementById('sourceSpreadsheetId').value,
         folderId: document.getElementById('folderId').value,
         senderPostal: document.getElementById('senderPostal').value,
-        senderAddress: document.getElementById('senderAddress').value
+        senderAddress: document.getElementById('senderAddress').value,
+        emailSenderName: document.getElementById('emailSenderName').value,
+        emailSenderTitle: document.getElementById('emailSenderTitle').value,
+        emailSenderSignature: document.getElementById('emailSenderSignature').value
       };
       
       // 유효성 검사

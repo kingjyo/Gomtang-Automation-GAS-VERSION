@@ -1,9 +1,9 @@
 /**
  * 품목별 시트 분리
- * ProductSplitter.gs
+ * ProductSpliter.gs
  */
 
-const ProductSplitter = {
+const ProductSpliter = {
   /**
    * 품목별로 시트 분리
    * @param {string} targetDate - MMDD 형식의 날짜 (선택적, 없으면 자동 추출)

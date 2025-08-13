@@ -1,11 +1,11 @@
 /**
- * EDI 데이터 처리
+ * EDI 데이터 처리 (날짜 지정 지원)
  * EDIData.gs
  */
 
 const EDIData = {
   /**
-   * EDI 데이터 업데이트
+   * EDI 데이터 업데이트 (오늘 날짜)
    */
   updateEDIData: function() {
     try {
@@ -17,6 +17,42 @@ const EDIData = {
       return this.getEDIFromEmail(searchDate);
       
     } catch (error) {
+      return {
+        success: false,
+        error: error.toString()
+      };
+    }
+  },
+
+  /**
+   * EDI 데이터 업데이트 (날짜 지정)
+   * @param {string} targetDate - MMDD 형식의 날짜 (예: "1205", "0315")
+   */
+  updateEDIDataForDate: function(targetDate) {
+    console.log('=== Function Start: updateEDIDataForDate ===');
+    console.log('Target Date:', targetDate);
+    
+    try {
+      // 날짜 유효성 검사
+      if (!targetDate || targetDate.length !== 4 || !/^\d{4}$/.test(targetDate)) {
+        throw new Error('날짜는 MMDD 형식으로 입력해주세요. (예: 1205, 0315)');
+      }
+      
+      const month = parseInt(targetDate.substring(0, 2));
+      const day = parseInt(targetDate.substring(2, 4));
+      
+      if (month < 1 || month > 12 || day < 1 || day > 31) {
+        throw new Error('올바른 날짜를 입력해주세요. (월: 01-12, 일: 01-31)');
+      }
+      
+      const result = this.getEDIFromEmail(targetDate);
+      
+      console.log('=== Function End: updateEDIDataForDate ===');
+      return result;
+      
+    } catch (error) {
+      console.error('ERROR in updateEDIDataForDate:', error.toString());
+      console.log('=== Function End: updateEDIDataForDate FAILED ===');
       return {
         success: false,
         error: error.toString()
@@ -53,29 +89,10 @@ const EDIData = {
         fullDate = getTodayDate();
       }
       
-      // 이메일 검색
-      const senders = ['brdmc@naver.com', 'suhyang@kas.co.kr'];
-      let threads = [];
+      console.log(`EDI 이메일 검색: ${targetDate} (전체: ${fullDate})`);
       
-      // 각 발신자별로 검색
-      for (const sender of senders) {
-        const query = `from:${sender} subject:"${targetDate}" has:attachment`;
-        const searchResults = GmailApp.search(query, 0, 10);
-        threads = threads.concat(searchResults);
-      }
-      
-      if (threads.length === 0) {
-        // 더 넓은 범위로 재검색 (시간 범위 포함 - 오늘 날짜인 경우만)
-        if (targetDate === getTodayShortDate()) {
-          const todayStart = new Date();
-          todayStart.setHours(13, 0, 0, 0); // 오후 1시
-          const todayEnd = new Date();
-          todayEnd.setHours(15, 30, 0, 0); // 오후 3시 30분
-          
-          const query = `(from:brdmc@naver.com OR from:suhyang@kas.co.kr) has:attachment after:${Math.floor(todayStart.getTime()/1000)} before:${Math.floor(todayEnd.getTime()/1000)}`;
-          threads = GmailApp.search(query, 0, 10);
-        }
-      }
+      // EDI 이메일 검색 로직 개선
+      const threads = this.searchEDIEmails(targetDate);
       
       if (threads.length === 0) {
         return {
@@ -93,11 +110,17 @@ const EDIData = {
           for (const attachment of attachments) {
             const fileName = attachment.getName();
             
-            // 엑셀 파일 확인
-            if (fileName.includes('운송장') && 
-                (fileName.endsWith('.xlsx') || fileName.endsWith('.xls'))) {
+            // 향상된 EDI 첨부파일 검증
+            if (this.isEDIAttachment(fileName, fullDate)) {
+              console.log(`EDI 첨부파일 발견: ${fileName}`);
               
-              // 엑셀 파일을 Google Sheets로 변환
+              // 한글 Office 파일 사전 감지
+              const contentType = attachment.getContentType();
+              if (contentType.includes('haansoft') || contentType.includes('hancom')) {
+                console.log(`⚠️ 한글 Office 파일 감지: ${fileName} (${contentType})`);
+                console.log('변환 과정에서 문제가 발생할 수 있습니다.');
+              }
+              
               return this.convertExcelToSheets(attachment, fullDate);
             }
           }
@@ -118,11 +141,192 @@ const EDIData = {
   },
   
   /**
+   * EDI 이메일 검색 (개선된 로직)
+   */
+  searchEDIEmails: function(targetDate) {
+    let threads = [];
+    
+    // 1. brdmc@naver.com 발신자 우선 검색
+    const primarySender = 'brdmc@naver.com';
+    
+    // 1-1. MMDD 제목으로 검색
+    let query = `from:${primarySender} subject:"${targetDate}" has:attachment`;
+    let searchResults = GmailApp.search(query, 0, 10);
+    threads = threads.concat(searchResults);
+    
+    // 1-2. MMDD.xlsx 제목으로 검색
+    query = `from:${primarySender} subject:"${targetDate}.xlsx" has:attachment`;
+    searchResults = GmailApp.search(query, 0, 10);
+    threads = threads.concat(searchResults);
+    
+    // 1-3. MMDD.xls 제목으로 검색
+    query = `from:${primarySender} subject:"${targetDate}.xls" has:attachment`;
+    searchResults = GmailApp.search(query, 0, 10);
+    threads = threads.concat(searchResults);
+    
+    // 1-4. 운송장 관련 제목으로 검색 (날짜 포함)
+    const currentYear = new Date().getFullYear();
+    const fullDate = currentYear + targetDate; // YYYYMMDD
+    query = `from:${primarySender} subject:"${fullDate}_운송장" has:attachment`;
+    searchResults = GmailApp.search(query, 0, 10);
+    threads = threads.concat(searchResults);
+    
+    // 2. 보조 발신자 검색 (기존 로직 유지)
+    if (threads.length === 0) {
+      const secondarySender = 'suhyang@kas.co.kr';
+      query = `from:${secondarySender} subject:"${targetDate}" has:attachment`;
+      searchResults = GmailApp.search(query, 0, 10);
+      threads = threads.concat(searchResults);
+    }
+    
+    // 3. 시간 범위 검색 (오늘 날짜인 경우만)
+    if (threads.length === 0 && targetDate === getTodayShortDate()) {
+      const todayStart = new Date();
+      todayStart.setHours(13, 0, 0, 0); // 오후 1시
+      const todayEnd = new Date();
+      todayEnd.setHours(15, 30, 0, 0); // 오후 3시 30분
+      
+      query = `(from:brdmc@naver.com OR from:suhyang@kas.co.kr) has:attachment after:${Math.floor(todayStart.getTime()/1000)} before:${Math.floor(todayEnd.getTime()/1000)}`;
+      searchResults = GmailApp.search(query, 0, 10);
+      threads = threads.concat(searchResults);
+    }
+    
+    // 4. 과거 날짜 검색 (오늘이 아닌 경우 넓은 범위 검색)
+    if (threads.length === 0 && targetDate !== getTodayShortDate()) {
+      console.log('과거 날짜 검색 모드 활성화');
+      
+      // 더 넓은 범위의 검색
+      query = `(from:brdmc@naver.com OR from:suhyang@kas.co.kr) subject:${targetDate} has:attachment`;
+      searchResults = GmailApp.search(query, 0, 20);
+      threads = threads.concat(searchResults);
+      
+      // 운송장 키워드로 검색
+      query = `(from:brdmc@naver.com OR from:suhyang@kas.co.kr) subject:운송장 subject:${targetDate} has:attachment`;
+      searchResults = GmailApp.search(query, 0, 20);
+      threads = threads.concat(searchResults);
+      
+      // 전체 년도 포함 검색
+      const fullDate = currentYear + targetDate;
+      query = `(from:brdmc@naver.com OR from:suhyang@kas.co.kr) subject:${fullDate} has:attachment`;
+      searchResults = GmailApp.search(query, 0, 20);
+      threads = threads.concat(searchResults);
+    }
+    
+    // 중복 제거
+    const uniqueThreads = [];
+    const threadIds = new Set();
+    
+    for (const thread of threads) {
+      const threadId = thread.getId();
+      if (!threadIds.has(threadId)) {
+        threadIds.add(threadId);
+        uniqueThreads.push(thread);
+      }
+    }
+    
+    console.log(`EDI 이메일 검색 결과: ${uniqueThreads.length}개 발견 (중복 제거 후)`);
+    return uniqueThreads;
+  },
+  
+  /**
+   * EDI 첨부파일 검증 (개선된 로직)
+   */
+  isEDIAttachment: function(fileName, fullDate) {
+    console.log(`첨부파일 검증 중: ${fileName}`);
+    
+    // 엑셀 파일이 아니면 패스
+    if (!fileName.endsWith('.xlsx') && !fileName.endsWith('.xls')) {
+      return false;
+    }
+    
+    // 1. 운송장 관련 키워드 검증
+    if (fileName.includes('운송장')) {
+      console.log('운송장 키워드 발견');
+      return true;
+    }
+    
+    // 2. YYYYMMDD_운송장 출력 상세 패턴 검증
+    if (fullDate && fileName.includes(fullDate) && fileName.includes('운송장') && fileName.includes('출력')) {
+      console.log('YYYYMMDD_운송장 출력 상세 패턴 발견');
+      return true;
+    }
+    
+    // 3. 부분적 매칭 - 운송장 출력 상세
+    if (fileName.includes('운송장') && fileName.includes('출력') && fileName.includes('상세')) {
+      console.log('운송장 출력 상세 부분 패턴 발견');
+      return true;
+    }
+    
+    // 4. 날짜 패턴이 포함된 경우 (MMDD)
+    const shortDate = fullDate ? fullDate.substring(4) : null;
+    if (shortDate && fileName.includes(shortDate)) {
+      console.log('날짜 패턴 발견');
+      return true;
+    }
+    
+    // 5. 과거 날짜 검색시 더 유연한 검증
+    if (shortDate && shortDate !== getTodayShortDate()) {
+      // 과거 날짜의 경우 확장자만 확인하고 통과
+      if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+        console.log('과거 날짜 엑셀 파일 - 유연한 검증 통과');
+        return true;
+      }
+    }
+    
+    console.log('EDI 첨부파일 조건에 맞지 않음');
+    return false;
+  },
+  
+  /**
    * Excel 파일을 Google Sheets로 변환
    */
   convertExcelToSheets: function(attachment, fullDate) {
     try {
-      const blob = attachment.getAs('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      console.log(`첨부파일 변환 시작: ${attachment.getName()}`);
+      console.log(`첨부파일 ContentType: ${attachment.getContentType()}`);
+      
+      // 다양한 Excel 형식 지원을 위한 유연한 변환
+      let blob;
+      const contentType = attachment.getContentType();
+      
+      // 한글 Office 파일 형식 감지
+      if (contentType.includes('haansoft') || contentType.includes('hancom')) {
+        console.log('한글 Office 파일 형식 감지, 특별 처리');
+        
+        // 한글 Office의 경우 원본 blob 사용
+        blob = attachment.copyBlob();
+        
+        // MIME 타입을 Excel로 강제 변경
+        blob = blob.setContentType('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        console.log('한글 Office 파일의 MIME 타입을 Excel로 변경');
+        
+      } else {
+        // 일반적인 Excel 파일 처리
+        try {
+          // 표준 Excel 형식으로 변환 시도
+          blob = attachment.getAs('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+          console.log('표준 Excel 형식으로 변환 성공');
+        } catch (conversionError) {
+          console.log('표준 Excel 변환 실패, 대안 방법 시도:', conversionError.toString());
+          
+          try {
+            // .xls 형식으로 변환 시도
+            blob = attachment.getAs('application/vnd.ms-excel');
+            console.log('MS Excel 형식으로 변환 성공');
+          } catch (xlsError) {
+            console.log('MS Excel 변환도 실패, 원본 형식 그대로 사용:', xlsError.toString());
+            
+            // 원본 blob 그대로 사용하되 Excel MIME 타입으로 설정
+            blob = attachment.copyBlob();
+            try {
+              blob = blob.setContentType('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+              console.log('원본 blob의 MIME 타입을 Excel로 변경');
+            } catch (mimeError) {
+              console.log('MIME 타입 변경 실패, 원본 그대로 사용:', mimeError.toString());
+            }
+          }
+        }
+      }
       
       // fullDate가 없으면 오늘 날짜 사용
       if (!fullDate) {
@@ -135,22 +339,67 @@ const EDIData = {
       const tempFile = DriveApp.createFile(blob);
       tempFile.setName('temp_' + fileName);
       
-      // Google Sheets로 변환
-      const resource = {
-        title: fileName,
-        mimeType: MimeType.GOOGLE_SHEETS,
-        parents: [{id: CONFIG.FOLDER_ID}]
-      };
+      // Google Sheets로 변환 시도
+      let convertedFile;
+      let spreadsheet;
+      let sourceSheet;
       
       const fileId = tempFile.getId();
-      const convertedFile = Drive.Files.copy(resource, fileId);
+      
+      try {
+        // Drive API를 통한 변환 시도
+        const resource = {
+          title: fileName,
+          mimeType: MimeType.GOOGLE_SHEETS,
+          parents: [{id: CONFIG.FOLDER_ID}]
+        };
+        
+        convertedFile = Drive.Files.copy(resource, fileId);
+        console.log('Drive API 변환 성공');
+        
+        // 변환된 스프레드시트 열기
+        spreadsheet = SpreadsheetApp.openById(convertedFile.id);
+        sourceSheet = spreadsheet.getSheetByName('empty') || spreadsheet.getSheets()[0];
+        
+      } catch (driveConversionError) {
+        console.log('Drive API 변환 실패, 대안 방법 시도:', driveConversionError.toString());
+        
+        try {
+          // DriveApp을 통한 직접 변환 시도
+          const importedFile = DriveApp.getFileById(fileId);
+          
+          // 새 스프레드시트 생성
+          const newSpreadsheet = SpreadsheetApp.create(fileName);
+          convertedFile = { id: newSpreadsheet.getId() };
+          
+          console.log('새 스프레드시트 생성 후 수동 처리 필요');
+          
+          // 한글 Office 파일의 경우 상세한 안내 제공
+          const isHancomFile = contentType.includes('haansoft') || contentType.includes('hancom');
+          const fileTypeMsg = isHancomFile ? '한글 Office(한셀)' : '알 수 없는 Excel';
+          
+          return {
+            success: false,
+            error: `${fileTypeMsg} 파일 변환에 실패했습니다.\n\n📄 파일: ${attachment.getName()}\n🔧 형식: ${contentType}\n\n✅ 해결방법:\n1. Gmail에서 첨부파일을 직접 다운로드\n2. Google Drive에 업로드\n3. Google Sheets로 변환해서 열기\n4. 데이터를 복사해서 '${fileName}' 시트에 붙여넣기\n\n💡 팁: 한셀 파일은 Excel 형식으로 다시 저장 후 업로드하시면 자동으로 처리됩니다.`
+          };
+          
+        } catch (manualError) {
+          console.log('모든 변환 방법 실패:', manualError.toString());
+          
+          return {
+            success: false,
+            error: `Excel 파일을 처리할 수 없습니다.\n파일: ${attachment.getName()}\n형식: ${contentType}\n오류: ${driveConversionError.toString()}`
+          };
+        }
+      }
       
       // 임시 파일 삭제
-      DriveApp.getFileById(fileId).setTrashed(true);
-      
-      // 변환된 스프레드시트 열기
-      const spreadsheet = SpreadsheetApp.openById(convertedFile.id);
-      const sourceSheet = spreadsheet.getSheetByName('empty') || spreadsheet.getSheets()[0];
+      try {
+        DriveApp.getFileById(fileId).setTrashed(true);
+        console.log('임시 파일 삭제 완료');
+      } catch (deleteError) {
+        console.log('임시 파일 삭제 실패:', deleteError.toString());
+      }
       
       // 현재 스프레드시트에 복사
       const currentSpreadsheet = SpreadsheetApp.getActiveSpreadsheet();

@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <base target="_top">
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 20px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+    }
+
+    .container {
+      background: white;
+      border-radius: 10px;
+      padding: 30px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+    }
+
+    h2 {
+      color: #333;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    .upload-area {
+      border: 3px dashed #667eea;
+      border-radius: 10px;
+      padding: 40px;
+      text-align: center;
+      transition: all 0.3s ease;
+      background: #f8f9fa;
+      cursor: pointer;
+    }
+
+    .upload-area:hover {
+      background: #e9ecef;
+      border-color: #764ba2;
+    }
+
+    .upload-area.dragover {
+      background: #e3f2fd;
+      border-color: #2196f3;
+      transform: scale(1.02);
+    }
+
+    .upload-icon {
+      font-size: 48px;
+      color: #667eea;
+      margin-bottom: 10px;
+    }
+
+    .upload-text {
+      color: #666;
+      font-size: 16px;
+      margin-bottom: 10px;
+    }
+
+    .file-input {
+      display: none;
+    }
+
+    .file-info {
+      margin-top: 20px;
+      padding: 15px;
+      background: #f1f3f5;
+      border-radius: 5px;
+      display: none;
+    }
+
+    .file-info.show {
+      display: block;
+    }
+
+    .file-name {
+      font-weight: bold;
+      color: #333;
+      margin-bottom: 10px;
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 20px;
+      background: #e9ecef;
+      border-radius: 10px;
+      overflow: hidden;
+      margin-top: 10px;
+      display: none;
+    }
+
+    .progress-bar.show {
+      display: block;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #667eea, #764ba2);
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+
+    .button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 12px 30px;
+      border-radius: 5px;
+      font-size: 16px;
+      cursor: pointer;
+      margin-top: 20px;
+      transition: transform 0.2s ease;
+    }
+
+    .button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    .button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .message {
+      margin-top: 20px;
+      padding: 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      line-height: 1.5;
+      font-weight: 500;
+      white-space: pre-line;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      display: none;
+    }
+
+    .message.show {
+      display: block !important;
+    }
+
+    .message.success {
+      background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+      color: #155724;
+      border: 2px solid #28a745;
+      animation: slideIn 0.5s ease;
+    }
+
+    .message.error {
+      background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+      color: #721c24;
+      border: 2px solid #dc3545;
+      animation: slideIn 0.5s ease;
+    }
+
+    .message.info {
+      background: linear-gradient(135deg, #d1ecf1 0%, #bee5eb 100%);
+      color: #0c5460;
+      border: 2px solid #17a2b8;
+      animation: slideIn 0.5s ease;
+    }
+
+    .message.warning {
+      background: linear-gradient(135deg, #fff3cd 0%, #ffeeba 100%);
+      color: #856404;
+      border: 2px solid #ffc107;
+      animation: slideIn 0.5s ease;
+    }
+    
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .loading {
+      display: none;
+      text-align: center;
+      margin-top: 20px;
+    }
+
+    .loading.show {
+      display: block;
+    }
+
+    .spinner {
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #667eea;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto;
+    }
+
+    @keyframes spin {
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+
+    .trigger-setup {
+      margin-top: 20px;
+      padding: 20px;
+      background: #e8f5e8;
+      border: 2px solid #48bb78;
+      border-radius: 8px;
+      display: none;
+    }
+
+    .trigger-setup.show {
+      display: block;
+    }
+
+    .trigger-controls {
+      display: grid;
+      gap: 15px;
+      margin: 15px 0;
+    }
+
+    .trigger-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .trigger-row label {
+      min-width: 120px;
+      font-weight: 600;
+    }
+
+    .date-input {
+      width: 100px;
+      padding: 8px 12px;
+      border: 2px solid #ddd;
+      border-radius: 5px;
+      text-align: center;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .time-input {
+      width: 60px;
+      padding: 8px 10px;
+      border: 2px solid #ddd;
+      border-radius: 5px;
+      text-align: center;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .date-input:focus, .time-input:focus {
+      border-color: #667eea;
+      outline: none;
+      box-shadow: 0 0 5px rgba(102, 126, 234, 0.3);
+    }
+
+    .date-note {
+      font-size: 12px;
+      color: #666;
+      font-style: italic;
+      margin-top: 5px;
+    }
+
+    .trigger-button {
+      background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+      margin-top: 15px;
+    }
+
+    .trigger-button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .debug-info {
+      position: fixed;
+      bottom: 10px;
+      right: 10px;
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 10px;
+      border-radius: 5px;
+      font-size: 12px;
+      font-family: monospace;
+      max-width: 300px;
+      display: none;
+    }
+
+    .debug-info.show {
+      display: block;
+    }
+
+    .test-mode-indicator {
+      background: linear-gradient(135deg, #ff9a56 0%, #ff6b6b 100%);
+      color: white;
+      padding: 10px 15px;
+      border-radius: 6px;
+      margin-bottom: 15px;
+      text-align: center;
+      font-weight: bold;
+      display: none;
+    }
+
+    .test-mode-indicator.show {
+      display: block;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <h2>⏰ 트리거용 쿠팡 파일 업로더 (날짜 지정 가능)</h2>
+
+    <div class="test-mode-indicator" id="testModeIndicator">
+      🧪 테스트 모드: 이전 날짜로 실행됩니다
+    </div>
+
+    <div class="upload-area" id="uploadArea">
+      <div class="upload-icon">📁</div>
+      <div class="upload-text">쿠팡 엑셀 파일을 드래그 앤 드롭하거나 클릭하여 선택하세요</div>
+      <div style="color: #999; font-size: 14px;">(.xlsx, .xls 파일만 가능)</div>
+      <div style="color: #666; font-size: 13px; margin-top: 10px;">📌 이 파일은 자동 트리거 실행시 사용됩니다</div>
+      <input type="file" id="fileInput" class="file-input" accept=".xlsx,.xls">
+    </div>
+
+    <div class="file-info" id="fileInfo">
+      <div class="file-name" id="fileName"></div>
+      <div class="progress-bar" id="progressBar">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+    </div>
+
+    <button class="button" id="uploadButton" style="display: none;" onclick="uploadFile()">
+      업로드 시작
+    </button>
+
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <div style="margin-top: 10px; color: #666;">파일을 업로드하는 중입니다...</div>
+    </div>
+
+    <div class="trigger-setup" id="triggerSetup">
+      <h3 style="margin-top: 0; color: #2d5a27;">✅ 파일 업로드 완료!</h3>
+      <p><strong>업로드된 파일:</strong> <span id="uploadedFileName"></span></p>
+      <p><strong>파일 ID:</strong> <span id="uploadedFileId" style="font-family: monospace; font-size: 12px;"></span></p>
+      
+      <div class="trigger-controls">
+        <div class="trigger-row">
+          <label>📅 처리할 날짜:</label>
+          <input type="text" id="triggerDate" class="date-input" placeholder="MMDD" maxlength="4">
+          <div class="date-note">예: 1205 = 12월 5일, 0315 = 3월 15일 (테스트용)</div>
+        </div>
+        
+        <div class="trigger-row">
+          <label>⏰ 트리거 실행 시간:</label>
+          <input type="number" id="triggerHour" class="time-input" value="13" min="0" max="23">
+          <span>:</span>
+          <input type="number" id="triggerMinute" class="time-input" value="30" min="0" max="59">
+          <div class="date-note">몇 분 후 실행할지 설정</div>
+        </div>
+      </div>
+      
+      <button class="button trigger-button" id="triggerButton" onclick="setupTrigger()">🚀 자동 트리거 설정</button>
+    </div>
+
+    <div class="message" id="message"></div>
+    
+    <div class="debug-info" id="debugInfo"></div>
+  </div>
+
+  <script>
+    let selectedFile = null;
+    let uploadedFileId = null;
+    let isSettingTrigger = false;
+
+    const uploadArea = document.getElementById('uploadArea');
+    const fileInput = document.getElementById('fileInput');
+    const fileInfo = document.getElementById('fileInfo');
+    const fileName = document.getElementById('fileName');
+    const uploadButton = document.getElementById('uploadButton');
+    const progressBar = document.getElementById('progressBar');
+    const progressFill = document.getElementById('progressFill');
+    const loading = document.getElementById('loading');
+    const message = document.getElementById('message');
+    const triggerSetup = document.getElementById('triggerSetup');
+    const triggerButton = document.getElementById('triggerButton');
+    const debugInfo = document.getElementById('debugInfo');
+    const testModeIndicator = document.getElementById('testModeIndicator');
+
+    // 디버그 모드 활성화 (필요시 true로 변경)
+    const DEBUG_MODE = false;
+
+    function debugLog(msg) {
+      console.log('[DEBUG]', msg);
+      if (DEBUG_MODE) {
+        debugInfo.classList.add('show');
+        debugInfo.innerHTML = `${new Date().toLocaleTimeString()}: ${msg}<br>${debugInfo.innerHTML}`.substring(0, 500);
+      }
+    }
+
+    // 날짜 입력 필드 변경 시 테스트 모드 표시
+    document.getElementById('triggerDate').addEventListener('input', function(e) {
+      const dateValue = e.target.value;
+      if (dateValue && dateValue.length >= 3) {
+        testModeIndicator.classList.add('show');
+      } else {
+        testModeIndicator.classList.remove('show');
+      }
+    });
+
+    // 현재 날짜를 MMDD 형식으로 설정 (기본값)
+    function setCurrentDate() {
+      const now = new Date();
+      const month = (now.getMonth() + 1).toString().padStart(2, '0');
+      const date = now.getDate().toString().padStart(2, '0');
+      // document.getElementById('triggerDate').value = month + date;
+    }
+
+    // 페이지 로드시 현재 날짜 설정
+    window.addEventListener('load', setCurrentDate);
+
+    // 클릭으로 파일 선택
+    uploadArea.addEventListener('click', () => {
+      fileInput.click();
+    });
+
+    // 파일 선택 이벤트
+    fileInput.addEventListener('change', (e) => {
+      handleFile(e.target.files[0]);
+    });
+
+    // 드래그 앤 드롭 이벤트들
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+      document.addEventListener(eventName, preventDefaults, false);
+      uploadArea.addEventListener(eventName, preventDefaults, false);
+    });
+    
+    ['dragenter', 'dragover'].forEach(eventName => {
+      uploadArea.addEventListener(eventName, highlight, false);
+    });
+    
+    ['dragleave', 'drop'].forEach(eventName => {
+      uploadArea.addEventListener(eventName, unhighlight, false);
+    });
+    
+    uploadArea.addEventListener('drop', handleDrop, false);
+    
+    function preventDefaults(e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    
+    function highlight(e) {
+      uploadArea.classList.add('dragover');
+    }
+    
+    function unhighlight(e) {
+      uploadArea.classList.remove('dragover');
+    }
+    
+    function handleDrop(e) {
+      const files = e.dataTransfer.files;
+      if (files.length > 0) {
+        handleFile(files[0]);
+      }
+    }
+
+    function handleFile(file) {
+      if (!file) return;
+
+      // 파일 확장자 확인
+      const validExtensions = ['.xlsx', '.xls'];
+      const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+
+      if (!validExtensions.includes(fileExtension)) {
+        showMessage('엑셀 파일(.xlsx, .xls)만 업로드 가능합니다.', 'error');
+        return;
+      }
+
+      selectedFile = file;
+      fileName.textContent = `📄 ${file.name} (${formatFileSize(file.size)})`;
+      fileInfo.classList.add('show');
+      uploadButton.style.display = 'block';
+      hideMessage();
+      triggerSetup.classList.remove('show');
+      testModeIndicator.classList.remove('show');
+    }
+
+    function formatFileSize(bytes) {
+      if (bytes === 0) return '0 Bytes';
+      const k = 1024;
+      const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+    }
+
+    function uploadFile() {
+      if (!selectedFile) {
+        showMessage('파일을 선택해주세요.', 'error');
+        return;
+      }
+
+      uploadButton.disabled = true;
+      progressBar.classList.add('show');
+      loading.classList.add('show');
+
+      // 프로그레스 바 애니메이션
+      let progress = 0;
+      const progressInterval = setInterval(() => {
+        progress += 10;
+        progressFill.style.width = progress + '%';
+        if (progress >= 90) {
+          clearInterval(progressInterval);
+        }
+      }, 200);
+
+      // FileReader로 파일 읽기
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        const fileData = e.target.result.split(',')[1];
+
+        // Google Apps Script 함수 호출
+        google.script.run
+          .withSuccessHandler(onUploadSuccess)
+          .withFailureHandler(onUploadError)
+          .uploadCoupangFileForTrigger(fileData, selectedFile.name);
+      };
+
+      reader.readAsDataURL(selectedFile);
+    }
+
+    function onUploadSuccess(result) {
+      progressFill.style.width = '100%';
+      loading.classList.remove('show');
+
+      if (result.success) {
+        uploadedFileId = result.fileId;
+        document.getElementById('uploadedFileName').textContent = selectedFile.name;
+        document.getElementById('uploadedFileId').textContent = result.fileId;
+        
+        showMessage(`✅ 파일 업로드 완료! 이제 트리거를 설정하세요.`, 'success');
+        triggerSetup.classList.add('show');
+        
+        // 날짜가 설정되어 있으면 테스트 모드 표시
+        const dateValue = document.getElementById('triggerDate').value;
+        if (dateValue && dateValue.length >= 3) {
+          testModeIndicator.classList.add('show');
+        }
+      } else {
+        showMessage(`❌ ${result.error}`, 'error');
+      }
+
+      uploadButton.disabled = false;
+    }
+
+    function onUploadError(error) {
+      loading.classList.remove('show');
+      progressBar.classList.remove('show');
+      showMessage(`❌ 업로드 실패: ${error}`, 'error');
+      uploadButton.disabled = false;
+    }
+
+    function setupTrigger() {
+      debugLog('setupTrigger 함수 시작');
+      
+      if (isSettingTrigger) {
+        debugLog('이미 트리거 설정 중');
+        showMessage('⚠️ 이미 트리거 설정이 진행 중입니다. 잠시만 기다려주세요.', 'warning');
+        return;
+      }
+
+      if (!uploadedFileId) {
+        showMessage('먼저 파일을 업로드해주세요.', 'error');
+        return;
+      }
+
+      const hour = parseInt(document.getElementById('triggerHour').value);
+      const minute = parseInt(document.getElementById('triggerMinute').value);
+      const dateValue = document.getElementById('triggerDate').value.trim();
+
+      // 시간 유효성 검사
+      if (isNaN(hour) || isNaN(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+        showMessage('올바른 시간을 입력해주세요. (시: 0-23, 분: 0-59)', 'error');
+        return;
+      }
+
+      // 날짜 유효성 검사 (선택사항)
+      let targetDate = null;
+      if (dateValue) {
+        if (dateValue.length !== 4 || !/^\d{4}$/.test(dateValue)) {
+          showMessage('날짜는 MMDD 형식으로 입력해주세요. (예: 1205, 0315)', 'error');
+          return;
+        }
+        
+        const month = parseInt(dateValue.substring(0, 2));
+        const day = parseInt(dateValue.substring(2, 4));
+        
+        if (month < 1 || month > 12 || day < 1 || day > 31) {
+          showMessage('올바른 날짜를 입력해주세요. (월: 01-12, 일: 01-31)', 'error');
+          return;
+        }
+        
+        targetDate = dateValue;
+      }
+
+      // 트리거 설정 시작
+      isSettingTrigger = true;
+      triggerButton.disabled = true;
+      
+      // 로딩 메시지 표시
+      const timeStr = `${hour}:${minute.toString().padStart(2, '0')}`;
+      const dateStr = targetDate ? ` (${targetDate.substring(0,2)}월 ${targetDate.substring(2,4)}일 데이터로)` : ' (오늘 데이터로)';
+      
+      showMessage(`⏳ 트리거 설정 중입니다...\n${timeStr}에 실행되도록 설정하고 있습니다${dateStr}`, 'info');
+      
+      debugLog(`트리거 설정 요청: ${hour}:${minute}, 날짜: ${targetDate}, 파일 ID: ${uploadedFileId}`);
+      
+      // 트리거 설정
+      try {
+        google.script.run
+          .withSuccessHandler(function(result) {
+            debugLog('트리거 설정 응답 받음: ' + JSON.stringify(result));
+            
+            isSettingTrigger = false;
+            triggerButton.disabled = false;
+            
+            if (result && result.success) {
+              const successMessage = `🎉 트리거 설정 완료!\n\n` +
+                `⏰ 실행 시간: ${timeStr}\n` +
+                `📅 처리 날짜: ${targetDate ? `${targetDate.substring(0,2)}월 ${targetDate.substring(2,4)}일` : '오늘'}\n` +
+                `📄 파일: ${selectedFile.name}\n` +
+                `🔧 트리거 ID: ${result.triggerId || 'N/A'}\n\n` +
+                `✅ 설정된 시간에 자동 실행됩니다\n` +
+                `🔄 실패시 30분마다 최대 3회 재시도\n` +
+                `🧹 성공시 트리거와 파일 자동 정리`;
+              
+              showMessage(successMessage, 'success');
+              
+              setTimeout(() => {
+                showMessage('✨ 5초 후 창이 자동으로 닫힙니다...', 'info');
+                setTimeout(() => {
+                  google.script.host.close();
+                }, 5000);
+              }, 100);
+              
+            } else {
+              const errorMessage = result ? (result.error || '알 수 없는 오류') : '응답이 없습니다';
+              showMessage(`❌ 트리거 설정 실패!\n\n오류: ${errorMessage}`, 'error');
+            }
+          })
+          .withFailureHandler(function(error) {
+            debugLog('트리거 설정 오류: ' + error);
+            
+            isSettingTrigger = false;
+            triggerButton.disabled = false;
+            
+            showMessage(`❌ 트리거 설정 오류:\n${error}`, 'error');
+          })
+          .createTodayAutoTriggerWithDate(uploadedFileId, selectedFile.name, hour, minute, targetDate);
+          
+      } catch (error) {
+        debugLog('트리거 설정 예외: ' + error);
+        isSettingTrigger = false;
+        triggerButton.disabled = false;
+        showMessage(`❌ 예상치 못한 오류: ${error}`, 'error');
+      }
+    }
+
+    function showMessage(text, type = 'info') {
+      debugLog(`메시지 표시: [${type}] ${text}`);
+      
+      const messageElement = document.getElementById('message');
+      if (!messageElement) {
+        console.error('message 엘리먼트를 찾을 수 없습니다!');
+        return;
+      }
+      
+      messageElement.className = 'message';
+      messageElement.textContent = text;
+      messageElement.classList.add(type);
+      messageElement.classList.add('show');
+      
+      setTimeout(() => {
+        messageElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 100);
+    }
+
+    function hideMessage() {
+      const messageElement = document.getElementById('message');
+      if (messageElement) {
+        messageElement.className = 'message';
+        messageElement.textContent = '';
+      }
+    }
+
+    window.addEventListener('load', () => {
+      debugLog('페이지 로드 완료');
+      if (DEBUG_MODE) {
+        console.log('디버그 모드 활성화됨');
+      }
+    });
+  </script>
+</body>
+
+</html>
