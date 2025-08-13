@@ -2,594 +2,596 @@
 <html>
 
 <head>
-  <base target="_top">
-  <style>
-    body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      margin: 20px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      min-height: 100vh;
-    }
+    <base target="_top">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
 
-    .container {
-      background: white;
-      border-radius: 10px;
-      padding: 30px;
-      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
-    }
+        .container {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+        }
 
-    h2 {
-      color: #333;
-      margin-bottom: 20px;
-      text-align: center;
-    }
+        h2 {
+            color: #333;
+            margin-bottom: 20px;
+            text-align: center;
+        }
 
-    .info-box {
-      background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
-      border: 2px solid #2196f3;
-      border-radius: 8px;
-      padding: 15px;
-      margin-bottom: 20px;
-      text-align: center;
-    }
+        .info-box {
+            background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+            border: 2px solid #2196f3;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
 
-    .info-box h3 {
-      margin-top: 0;
-      color: #1976d2;
-    }
+        .info-box h3 {
+            margin-top: 0;
+            color: #1976d2;
+        }
 
-    .upload-area {
-      border: 3px dashed #667eea;
-      border-radius: 10px;
-      padding: 40px;
-      text-align: center;
-      transition: all 0.3s ease;
-      background: #f8f9fa;
-      cursor: pointer;
-    }
+        .upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            transition: all 0.3s ease;
+            background: #f8f9fa;
+            cursor: pointer;
+        }
 
-    .upload-area:hover {
-      background: #e9ecef;
-      border-color: #764ba2;
-    }
+        .upload-area:hover {
+            background: #e9ecef;
+            border-color: #764ba2;
+        }
 
-    .upload-area.dragover {
-      background: #e3f2fd;
-      border-color: #2196f3;
-      transform: scale(1.02);
-    }
+        .upload-area.dragover {
+            background: #e3f2fd;
+            border-color: #2196f3;
+            transform: scale(1.02);
+        }
 
-    .upload-icon {
-      font-size: 48px;
-      color: #667eea;
-      margin-bottom: 10px;
-    }
+        .upload-icon {
+            font-size: 48px;
+            color: #667eea;
+            margin-bottom: 10px;
+        }
 
-    .upload-text {
-      color: #666;
-      font-size: 16px;
-      margin-bottom: 10px;
-    }
+        .upload-text {
+            color: #666;
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
 
-    .file-input {
-      display: none;
-    }
+        .file-input {
+            display: none;
+        }
 
-    .file-info {
-      margin-top: 20px;
-      padding: 15px;
-      background: #f1f3f5;
-      border-radius: 5px;
-      display: none;
-    }
+        .file-info {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f1f3f5;
+            border-radius: 5px;
+            display: none;
+        }
 
-    .file-info.show {
-      display: block;
-    }
+        .file-info.show {
+            display: block;
+        }
 
-    .file-name {
-      font-weight: bold;
-      color: #333;
-      margin-bottom: 10px;
-    }
+        .file-name {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+        }
 
-    .progress-bar {
-      width: 100%;
-      height: 20px;
-      background: #e9ecef;
-      border-radius: 10px;
-      overflow: hidden;
-      margin-top: 10px;
-      display: none;
-    }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 10px;
+            display: none;
+        }
 
-    .progress-bar.show {
-      display: block;
-    }
+        .progress-bar.show {
+            display: block;
+        }
 
-    .progress-fill {
-      height: 100%;
-      background: linear-gradient(90deg, #667eea, #764ba2);
-      width: 0%;
-      transition: width 0.3s ease;
-    }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
 
-    .button {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      border: none;
-      padding: 12px 30px;
-      border-radius: 5px;
-      font-size: 16px;
-      cursor: pointer;
-      margin-top: 20px;
-      transition: transform 0.2s ease;
-    }
+        .button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: transform 0.2s ease;
+        }
 
-    .button:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
-    }
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
 
-    .button:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-      transform: none;
-    }
+        .button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
 
-    .process-button {
-      background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
-      font-size: 18px;
-      padding: 15px 40px;
-      display: none;
-    }
+        .process-button {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            font-size: 18px;
+            padding: 15px 40px;
+            display: none;
+        }
 
-    .process-button.show {
-      display: inline-block;
-    }
+        .process-button.show {
+            display: inline-block;
+        }
 
-    .message {
-      margin-top: 20px;
-      padding: 20px;
-      border-radius: 8px;
-      font-size: 14px;
-      line-height: 1.5;
-      font-weight: 500;
-      white-space: pre-line;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-      display: none;
-    }
+        .message {
+            margin-top: 20px;
+            padding: 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            line-height: 1.5;
+            font-weight: 500;
+            white-space: pre-line;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            display: none;
+        }
 
-    .message.show {
-      display: block !important;
-    }
+        .message.show {
+            display: block !important;
+        }
 
-    .message.success {
-      background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
-      color: #155724;
-      border: 2px solid #28a745;
-      animation: slideIn 0.5s ease;
-    }
+        .message.success {
+            background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+            color: #155724;
+            border: 2px solid #28a745;
+            animation: slideIn 0.5s ease;
+        }
 
-    .message.error {
-      background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
-      color: #721c24;
-      border: 2px solid #dc3545;
-      animation: slideIn 0.5s ease;
-    }
+        .message.error {
+            background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+            color: #721c24;
+            border: 2px solid #dc3545;
+            animation: slideIn 0.5s ease;
+        }
 
-    .message.info {
-      background: linear-gradient(135deg, #d1ecf1 0%, #bee5eb 100%);
-      color: #0c5460;
-      border: 2px solid #17a2b8;
-      animation: slideIn 0.5s ease;
-    }
+        .message.info {
+            background: linear-gradient(135deg, #d1ecf1 0%, #bee5eb 100%);
+            color: #0c5460;
+            border: 2px solid #17a2b8;
+            animation: slideIn 0.5s ease;
+        }
 
-    .message.warning {
-      background: linear-gradient(135deg, #fff3cd 0%, #ffeeba 100%);
-      color: #856404;
-      border: 2px solid #ffc107;
-      animation: slideIn 0.5s ease;
-    }
-    
-    @keyframes slideIn {
-      from {
-        opacity: 0;
-        transform: translateY(-20px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
+        .message.warning {
+            background: linear-gradient(135deg, #fff3cd 0%, #ffeeba 100%);
+            color: #856404;
+            border: 2px solid #ffc107;
+            animation: slideIn 0.5s ease;
+        }
 
-    .loading {
-      display: none;
-      text-align: center;
-      margin-top: 20px;
-    }
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
 
-    .loading.show {
-      display: block;
-    }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
 
-    .spinner {
-      border: 3px solid #f3f3f3;
-      border-top: 3px solid #667eea;
-      border-radius: 50%;
-      width: 40px;
-      height: 40px;
-      animation: spin 1s linear infinite;
-      margin: 0 auto;
-    }
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 20px;
+        }
 
-    @keyframes spin {
-      0% {
-        transform: rotate(0deg);
-      }
+        .loading.show {
+            display: block;
+        }
 
-      100% {
-        transform: rotate(360deg);
-      }
-    }
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
 
-    .pipeline-status {
-      background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-      border: 2px solid #6c757d;
-      border-radius: 8px;
-      padding: 15px;
-      margin-bottom: 20px;
-    }
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
 
-    .status-item {
-      display: flex;
-      align-items: center;
-      margin: 8px 0;
-    }
+            100% {
+                transform: rotate(360deg);
+            }
+        }
 
-    .status-icon {
-      margin-right: 10px;
-      font-size: 16px;
-      width: 20px;
-    }
+        .pipeline-status {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border: 2px solid #6c757d;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
 
-    .completed {
-      color: #28a745;
-    }
+        .status-item {
+            display: flex;
+            align-items: center;
+            margin: 8px 0;
+        }
 
-    .current {
-      color: #ffc107;
-    }
+        .status-icon {
+            margin-right: 10px;
+            font-size: 16px;
+            width: 20px;
+        }
 
-    .pending {
-      color: #6c757d;
-    }
-  </style>
+        .completed {
+            color: #28a745;
+        }
+
+        .current {
+            color: #ffc107;
+        }
+
+        .pending {
+            color: #6c757d;
+        }
+    </style>
 </head>
 
 <body>
-  <div class="container">
-    <h2>🚀 즉시 처리용 쿠팡 업로더</h2>
-    
-    <div class="info-box">
-      <h3>🚀 전체 파이프라인 실행</h3>
-      <p><strong>처리 날짜:</strong> <span id="targetDate">확인 중...</span></p>
-      <p><strong>실행 방식:</strong> 쿠팡 파일 업로드 → 전체 파이프라인 자동 실행</p>
+    <div class="container">
+        <h2>🚀 즉시 처리용 쿠팡 업로더</h2>
+
+        <div class="info-box">
+            <h3>🚀 전체 파이프라인 실행</h3>
+            <p><strong>처리 날짜:</strong> <span id="targetDate">확인 중...</span></p>
+            <p><strong>실행 방식:</strong> 쿠팡 파일 업로드 → 전체 파이프라인 자동 실행</p>
+        </div>
+
+        <div class="pipeline-status">
+            <div class="status-item pending">
+                <span class="status-icon">⚪</span>
+                <span>1️⃣ Part 1: 싸이버스카이 + EDI + 검산</span>
+            </div>
+            <div class="status-item current">
+                <span class="status-icon">⏳</span>
+                <span>2️⃣ 쿠팡 파일 업로드 (현재 단계)</span>
+            </div>
+            <div class="status-item pending">
+                <span class="status-icon">⚪</span>
+                <span>3️⃣ 쿠팡 데이터 처리</span>
+            </div>
+            <div class="status-item pending">
+                <span class="status-icon">⚪</span>
+                <span>4️⃣ 품목별 시트 분리</span>
+            </div>
+            <div class="status-item pending">
+                <span class="status-icon">⚪</span>
+                <span>5️⃣ 이메일 전송</span>
+            </div>
+        </div>
+
+        <div class="upload-area" id="uploadArea">
+            <div class="upload-icon">🛍️</div>
+            <div class="upload-text">쿠팡 엑셀 파일을 드래그 앤 드롭하거나 클릭하여 선택하세요</div>
+            <div style="color: #999; font-size: 14px;">(.xlsx, .xls 파일만 가능)</div>
+            <div style="color: #666; font-size: 13px; margin-top: 10px;">📌 업로드 즉시 Part 2가 자동 실행됩니다</div>
+            <input type="file" id="fileInput" class="file-input" accept=".xlsx,.xls">
+        </div>
+
+        <div class="file-info" id="fileInfo">
+            <div class="file-name" id="fileName"></div>
+            <div class="progress-bar" id="progressBar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+        </div>
+
+        <button class="button process-button" id="processButton" onclick="processFile()">
+            🚀 즉시 처리 실행
+        </button>
+
+        <button class="button" id="skipButton" onclick="skipCoupangProcessing()"
+            style="background: linear-gradient(135deg, #6c757d 0%, #495057 100%); margin-left: 10px;">
+            ⏭️ 쿠팡 파일 없이 건너뛰기
+        </button>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <div style="margin-top: 10px; color: #666;">Part 2 파이프라인을 실행하는 중입니다...</div>
+        </div>
+
+        <div class="message" id="message"></div>
     </div>
 
-    <div class="pipeline-status">
-      <div class="status-item pending">
-        <span class="status-icon">⚪</span>
-        <span>1️⃣ Part 1: 싸이버스카이 + EDI + 검산</span>
-      </div>
-      <div class="status-item current">
-        <span class="status-icon">⏳</span>
-        <span>2️⃣ 쿠팡 파일 업로드 (현재 단계)</span>
-      </div>
-      <div class="status-item pending">
-        <span class="status-icon">⚪</span>
-        <span>3️⃣ 쿠팡 데이터 처리</span>
-      </div>
-      <div class="status-item pending">
-        <span class="status-icon">⚪</span>
-        <span>4️⃣ 품목별 시트 분리</span>
-      </div>
-      <div class="status-item pending">
-        <span class="status-icon">⚪</span>
-        <span>5️⃣ 이메일 전송</span>
-      </div>
-    </div>
+    <script>
+        let selectedFile = null;
+        let isProcessing = false;
 
-    <div class="upload-area" id="uploadArea">
-      <div class="upload-icon">🛍️</div>
-      <div class="upload-text">쿠팡 엑셀 파일을 드래그 앤 드롭하거나 클릭하여 선택하세요</div>
-      <div style="color: #999; font-size: 14px;">(.xlsx, .xls 파일만 가능)</div>
-      <div style="color: #666; font-size: 13px; margin-top: 10px;">📌 업로드 즉시 Part 2가 자동 실행됩니다</div>
-      <input type="file" id="fileInput" class="file-input" accept=".xlsx,.xls">
-    </div>
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const fileInfo = document.getElementById('fileInfo');
+        const fileName = document.getElementById('fileName');
+        const processButton = document.getElementById('processButton');
+        const progressBar = document.getElementById('progressBar');
+        const progressFill = document.getElementById('progressFill');
+        const loading = document.getElementById('loading');
+        const message = document.getElementById('message');
 
-    <div class="file-info" id="fileInfo">
-      <div class="file-name" id="fileName"></div>
-      <div class="progress-bar" id="progressBar">
-        <div class="progress-fill" id="progressFill"></div>
-      </div>
-    </div>
+        // 페이지 로드시 날짜 정보 가져오기
+        window.addEventListener('load', function () {
+            google.script.run
+                .withSuccessHandler(function (result) {
+                    document.getElementById('targetDate').textContent = result.dateString;
+                })
+                .withFailureHandler(function (error) {
+                    document.getElementById('targetDate').textContent = '오늘';
+                })
+                .getImmediateTargetDate();
+        });
 
-    <button class="button process-button" id="processButton" onclick="processFile()">
-      🚀 즉시 처리 실행
-    </button>
+        // 클릭으로 파일 선택
+        uploadArea.addEventListener('click', () => {
+            fileInput.click();
+        });
 
-    <button class="button" id="skipButton" onclick="skipCoupangProcessing()" style="background: linear-gradient(135deg, #6c757d 0%, #495057 100%); margin-left: 10px;">
-      ⏭️ 쿠팡 파일 없이 건너뛰기
-    </button>
+        // 파일 선택 이벤트
+        fileInput.addEventListener('change', (e) => {
+            handleFile(e.target.files[0]);
+        });
 
-    <div class="loading" id="loading">
-      <div class="spinner"></div>
-      <div style="margin-top: 10px; color: #666;">Part 2 파이프라인을 실행하는 중입니다...</div>
-    </div>
+        // 드래그 앤 드롭 이벤트들
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            document.addEventListener(eventName, preventDefaults, false);
+            uploadArea.addEventListener(eventName, preventDefaults, false);
+        });
 
-    <div class="message" id="message"></div>
-  </div>
+        ['dragenter', 'dragover'].forEach(eventName => {
+            uploadArea.addEventListener(eventName, highlight, false);
+        });
 
-  <script>
-    let selectedFile = null;
-    let isProcessing = false;
+        ['dragleave', 'drop'].forEach(eventName => {
+            uploadArea.addEventListener(eventName, unhighlight, false);
+        });
 
-    const uploadArea = document.getElementById('uploadArea');
-    const fileInput = document.getElementById('fileInput');
-    const fileInfo = document.getElementById('fileInfo');
-    const fileName = document.getElementById('fileName');
-    const processButton = document.getElementById('processButton');
-    const progressBar = document.getElementById('progressBar');
-    const progressFill = document.getElementById('progressFill');
-    const loading = document.getElementById('loading');
-    const message = document.getElementById('message');
+        uploadArea.addEventListener('drop', handleDrop, false);
 
-    // 페이지 로드시 날짜 정보 가져오기
-    window.addEventListener('load', function() {
-      google.script.run
-        .withSuccessHandler(function(result) {
-          document.getElementById('targetDate').textContent = result.dateString;
-        })
-        .withFailureHandler(function(error) {
-          document.getElementById('targetDate').textContent = '오늘';
-        })
-        .getImmediateTargetDate();
-    });
-
-    // 클릭으로 파일 선택
-    uploadArea.addEventListener('click', () => {
-      fileInput.click();
-    });
-
-    // 파일 선택 이벤트
-    fileInput.addEventListener('change', (e) => {
-      handleFile(e.target.files[0]);
-    });
-
-    // 드래그 앤 드롭 이벤트들
-    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-      document.addEventListener(eventName, preventDefaults, false);
-      uploadArea.addEventListener(eventName, preventDefaults, false);
-    });
-    
-    ['dragenter', 'dragover'].forEach(eventName => {
-      uploadArea.addEventListener(eventName, highlight, false);
-    });
-    
-    ['dragleave', 'drop'].forEach(eventName => {
-      uploadArea.addEventListener(eventName, unhighlight, false);
-    });
-    
-    uploadArea.addEventListener('drop', handleDrop, false);
-    
-    function preventDefaults(e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-    
-    function highlight(e) {
-      uploadArea.classList.add('dragover');
-    }
-    
-    function unhighlight(e) {
-      uploadArea.classList.remove('dragover');
-    }
-    
-    function handleDrop(e) {
-      const files = e.dataTransfer.files;
-      if (files.length > 0) {
-        handleFile(files[0]);
-      }
-    }
-
-    function handleFile(file) {
-      if (!file) return;
-
-      // 파일 확장자 확인
-      const validExtensions = ['.xlsx', '.xls'];
-      const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
-
-      if (!validExtensions.includes(fileExtension)) {
-        showMessage('엑셀 파일(.xlsx, .xls)만 업로드 가능합니다.', 'error');
-        return;
-      }
-
-      selectedFile = file;
-      fileName.textContent = `🛍️ ${file.name} (${formatFileSize(file.size)})`;
-      fileInfo.classList.add('show');
-      processButton.classList.add('show');
-      
-      // 건너뛰기 버튼 숨기기 (파일이 선택되면)
-      document.getElementById('skipButton').style.display = 'none';
-      
-      hideMessage();
-    }
-
-    function formatFileSize(bytes) {
-      if (bytes === 0) return '0 Bytes';
-      const k = 1024;
-      const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-      const i = Math.floor(Math.log(bytes) / Math.log(k));
-      return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
-    }
-
-    function processFile() {
-      if (!selectedFile || isProcessing) {
-        if (!selectedFile) {
-          showMessage('파일을 선택해주세요.', 'error');
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
         }
-        return;
-      }
 
-      isProcessing = true;
-      processButton.disabled = true;
-      progressBar.classList.add('show');
-      loading.classList.add('show');
-
-      // 프로그레스 바 애니메이션
-      let progress = 0;
-      const progressInterval = setInterval(() => {
-        progress += 5;
-        progressFill.style.width = progress + '%';
-        if (progress >= 90) {
-          clearInterval(progressInterval);
+        function highlight(e) {
+            uploadArea.classList.add('dragover');
         }
-      }, 200);
 
-      // 상태 업데이트
-      updatePipelineStatus();
+        function unhighlight(e) {
+            uploadArea.classList.remove('dragover');
+        }
 
-      // FileReader로 파일 읽기
-      const reader = new FileReader();
-      reader.onload = function (e) {
-        const fileData = e.target.result.split(',')[1]; // base64 데이터만 추출
+        function handleDrop(e) {
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        }
 
-        // Google Apps Script 함수 호출
-        google.script.run
-          .withSuccessHandler(onProcessSuccess)
-          .withFailureHandler(onProcessError)
-          .processCoupangFileImmediately(fileData, selectedFile.name);
-      };
+        function handleFile(file) {
+            if (!file) return;
 
-      reader.readAsDataURL(selectedFile);
-    }
+            // 파일 확장자 확인
+            const validExtensions = ['.xlsx', '.xls'];
+            const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
 
-    function onProcessSuccess(result) {
-      progressFill.style.width = '100%';
-      loading.classList.remove('show');
-      isProcessing = false;
+            if (!validExtensions.includes(fileExtension)) {
+                showMessage('엑셀 파일(.xlsx, .xls)만 업로드 가능합니다.', 'error');
+                return;
+            }
 
-      if (result.success) {
-        showMessage(result.message, 'success');
-        
-        // 성공시 상태 업데이트
-        updatePipelineStatusComplete();
-        
-        // 5초 후 창 닫기
-        setTimeout(() => {
-          showMessage('✨ 5초 후 창이 자동으로 닫힙니다...', 'info');
-          setTimeout(() => {
-            google.script.host.close();
-          }, 5000);
-        }, 2000);
-        
-      } else {
-        showMessage(`❌ 처리 실패!\n\n${result.error}`, 'error');
-        processButton.disabled = false;
-      }
-    }
+            selectedFile = file;
+            fileName.textContent = `🛍️ ${file.name} (${formatFileSize(file.size)})`;
+            fileInfo.classList.add('show');
+            processButton.classList.add('show');
 
-    function onProcessError(error) {
-      loading.classList.remove('show');
-      progressBar.classList.remove('show');
-      showMessage(`❌ 처리 실패: ${error}`, 'error');
-      isProcessing = false;
-      processButton.disabled = false;
-    }
+            // 건너뛰기 버튼 숨기기 (파일이 선택되면)
+            document.getElementById('skipButton').style.display = 'none';
 
-    function updatePipelineStatus() {
-      const statusItems = document.querySelectorAll('.status-item');
-      
-      // 1번째 항목 (Part 1) 실행 중
-      statusItems[0].classList.remove('pending');
-      statusItems[0].classList.add('current');
-      statusItems[0].querySelector('.status-icon').textContent = '⏳';
-      
-      // 2번째 항목 (쿠팡 업로드) 완료 처리
-      statusItems[1].classList.remove('current');
-      statusItems[1].classList.add('completed');
-      statusItems[1].querySelector('.status-icon').textContent = '✅';
-      
-      // 3번째 항목 (쿠팡 처리) 현재 처리 중으로 변경
-      statusItems[2].classList.remove('pending');
-      statusItems[2].classList.add('current');
-      statusItems[2].querySelector('.status-icon').textContent = '⏳';
-    }
+            hideMessage();
+        }
 
-    function updatePipelineStatusComplete() {
-      const statusItems = document.querySelectorAll('.status-item');
-      
-      // 모든 항목 완료 처리
-      statusItems.forEach((item, index) => {
-        item.classList.remove('pending', 'current');
-        item.classList.add('completed');
-        item.querySelector('.status-icon').textContent = '✅';
-      });
-    }
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+        }
 
-    function showMessage(text, type = 'info') {
-      const messageElement = document.getElementById('message');
-      if (!messageElement) {
-        console.error('message 엘리먼트를 찾을 수 없습니다!');
-        return;
-      }
-      
-      messageElement.className = 'message';
-      messageElement.textContent = text;
-      messageElement.classList.add(type);
-      messageElement.classList.add('show');
-      
-      setTimeout(() => {
-        messageElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      }, 100);
-    }
+        function processFile() {
+            if (!selectedFile || isProcessing) {
+                if (!selectedFile) {
+                    showMessage('파일을 선택해주세요.', 'error');
+                }
+                return;
+            }
 
-    function hideMessage() {
-      const messageElement = document.getElementById('message');
-      if (messageElement) {
-        messageElement.className = 'message';
-        messageElement.textContent = '';
-      }
-    }
+            isProcessing = true;
+            processButton.disabled = true;
+            progressBar.classList.add('show');
+            loading.classList.add('show');
 
-    function skipCoupangProcessing() {
-      const confirmSkip = confirm(
-        '⏭️ 쿠팡 파일 처리를 건너뛰시겠습니까?\n\n' +
-        'Part 1은 이미 완료되었습니다.\n' +
-        '나중에 별도로 쿠팡 파일을 처리할 수 있습니다.\n\n' +
-        '확인: 건너뛰고 창 닫기\n' +
-        '취소: 계속 진행'
-      );
-      
-      if (confirmSkip) {
-        showMessage(
-          '✅ Part 1 완료!\n\n' +
-          'Part 1 (싸이버스카이 + EDI + 검산)이 완료되었습니다.\n' +
-          '쿠팡 파일 처리는 건너뛰었습니다.\n\n' +
-          '필요시 다음 메뉴를 이용하세요:\n' +
-          '• "2️⃣ Part 2만 실행 (쿠팡부터)"\n' +
-          '• "🛍️ 쿠팡 데이터 업로더 열기"\n\n' +
-          '3초 후 창이 닫힙니다...',
-          'info'
-        );
-        
-        setTimeout(() => {
-          google.script.host.close();
-        }, 3000);
-      }
-    }
-  </script>
+            // 프로그레스 바 애니메이션
+            let progress = 0;
+            const progressInterval = setInterval(() => {
+                progress += 5;
+                progressFill.style.width = progress + '%';
+                if (progress >= 90) {
+                    clearInterval(progressInterval);
+                }
+            }, 200);
+
+            // 상태 업데이트
+            updatePipelineStatus();
+
+            // FileReader로 파일 읽기
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const fileData = e.target.result.split(',')[1]; // base64 데이터만 추출
+
+                // Google Apps Script 함수 호출
+                google.script.run
+                    .withSuccessHandler(onProcessSuccess)
+                    .withFailureHandler(onProcessError)
+                    .processCoupangFileImmediately(fileData, selectedFile.name);
+            };
+
+            reader.readAsDataURL(selectedFile);
+        }
+
+        function onProcessSuccess(result) {
+            progressFill.style.width = '100%';
+            loading.classList.remove('show');
+            isProcessing = false;
+
+            if (result.success) {
+                showMessage(result.message, 'success');
+
+                // 성공시 상태 업데이트
+                updatePipelineStatusComplete();
+
+                // 5초 후 창 닫기
+                setTimeout(() => {
+                    showMessage('✨ 5초 후 창이 자동으로 닫힙니다...', 'info');
+                    setTimeout(() => {
+                        google.script.host.close();
+                    }, 5000);
+                }, 2000);
+
+            } else {
+                showMessage(`❌ 처리 실패!\n\n${result.error}`, 'error');
+                processButton.disabled = false;
+            }
+        }
+
+        function onProcessError(error) {
+            loading.classList.remove('show');
+            progressBar.classList.remove('show');
+            showMessage(`❌ 처리 실패: ${error}`, 'error');
+            isProcessing = false;
+            processButton.disabled = false;
+        }
+
+        function updatePipelineStatus() {
+            const statusItems = document.querySelectorAll('.status-item');
+
+            // 1번째 항목 (Part 1) 실행 중
+            statusItems[0].classList.remove('pending');
+            statusItems[0].classList.add('current');
+            statusItems[0].querySelector('.status-icon').textContent = '⏳';
+
+            // 2번째 항목 (쿠팡 업로드) 완료 처리
+            statusItems[1].classList.remove('current');
+            statusItems[1].classList.add('completed');
+            statusItems[1].querySelector('.status-icon').textContent = '✅';
+
+            // 3번째 항목 (쿠팡 처리) 현재 처리 중으로 변경
+            statusItems[2].classList.remove('pending');
+            statusItems[2].classList.add('current');
+            statusItems[2].querySelector('.status-icon').textContent = '⏳';
+        }
+
+        function updatePipelineStatusComplete() {
+            const statusItems = document.querySelectorAll('.status-item');
+
+            // 모든 항목 완료 처리
+            statusItems.forEach((item, index) => {
+                item.classList.remove('pending', 'current');
+                item.classList.add('completed');
+                item.querySelector('.status-icon').textContent = '✅';
+            });
+        }
+
+        function showMessage(text, type = 'info') {
+            const messageElement = document.getElementById('message');
+            if (!messageElement) {
+                console.error('message 엘리먼트를 찾을 수 없습니다!');
+                return;
+            }
+
+            messageElement.className = 'message';
+            messageElement.textContent = text;
+            messageElement.classList.add(type);
+            messageElement.classList.add('show');
+
+            setTimeout(() => {
+                messageElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }, 100);
+        }
+
+        function hideMessage() {
+            const messageElement = document.getElementById('message');
+            if (messageElement) {
+                messageElement.className = 'message';
+                messageElement.textContent = '';
+            }
+        }
+
+        function skipCoupangProcessing() {
+            const confirmSkip = confirm(
+                '⏭️ 쿠팡 파일 처리를 건너뛰시겠습니까?\n\n' +
+                'Part 1은 이미 완료되었습니다.\n' +
+                '나중에 별도로 쿠팡 파일을 처리할 수 있습니다.\n\n' +
+                '확인: 건너뛰고 창 닫기\n' +
+                '취소: 계속 진행'
+            );
+
+            if (confirmSkip) {
+                showMessage(
+                    '✅ Part 1 완료!\n\n' +
+                    'Part 1 (싸이버스카이 + EDI + 검산)이 완료되었습니다.\n' +
+                    '쿠팡 파일 처리는 건너뛰었습니다.\n\n' +
+                    '필요시 다음 메뉴를 이용하세요:\n' +
+                    '• "2️⃣ Part 2만 실행 (쿠팡부터)"\n' +
+                    '• "🛍️ 쿠팡 데이터 업로더 열기"\n\n' +
+                    '3초 후 창이 닫힙니다...',
+                    'info'
+                );
+
+                setTimeout(() => {
+                    google.script.host.close();
+                }, 3000);
+            }
+        }
+    </script>
 </body>
 
 </html>
